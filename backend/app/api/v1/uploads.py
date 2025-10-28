@@ -1,6 +1,7 @@
 from __future__ import annotations
 import hashlib
 import uuid
+import typing
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, List, Optional
 
@@ -51,6 +52,7 @@ class _UploadRec(BaseModel):
 
 _UPLOADS: Dict[str, _UploadRec] = {}
 _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
+MAX_UPLOAD_BYTES = 1_000_000_000  # 1 GB cap
 
 # ---------------------------
 # Response models
@@ -129,6 +131,7 @@ def _make_stub_result() -> tuple[list[dict], list[dict], list[dict]]:
 async def create_upload(
     file: UploadFile = File(...),
     meeting_id: str = Form(...),
+    duration_sec: typing.Optional[float] = Form(None), 
     db: Session = Depends(get_session),
     background_tasks: BackgroundTasks = None,
 ):
@@ -138,6 +141,12 @@ async def create_upload(
         raise HTTPException(status_code=422, detail="empty file")
     sha = _sha256(blob)
     byte_size = len(blob)
+    if byte_size > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="file too large (limit 1 GB)")
+    if duration_sec is not None and duration_sec > 3600:
+        raise HTTPException(status_code=422, detail="duration exceeds 60 minutes")
+
+
 
     # in-memory dedupe (keeps stub compatibility)
     key = (meeting_id, sha)
@@ -170,6 +179,7 @@ async def create_upload(
         segments=[],
         bullets=[],
         action_items=[],
+        duration_sec=duration_sec,
     )
     _UPLOADS[uid] = rec
     _INDEX[key] = uid
@@ -182,7 +192,7 @@ async def create_upload(
         mime_type=rec.mime_type,
         byte_size=rec.byte_size,
         sha256=rec.sha256,
-        duration_sec=None,
+        duration_sec=duration_sec,
         status="queued",
         error=None,
         created_at=created,
