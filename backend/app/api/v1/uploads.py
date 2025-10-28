@@ -10,6 +10,7 @@ from starlette.status import HTTP_202_ACCEPTED
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ...db import get_session
 from ...models import (
@@ -179,8 +180,27 @@ async def create_upload(
         created_at=datetime.now(timezone.utc),
         retained_until=datetime.now(timezone.utc) + timedelta(days=90),
     )
-    db.add(db_row)
-    db.commit()
+    try:
+        db.add(db_row)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(Upload).filter(
+            Upload.meeting_id == meeting_id, Upload.sha256 == sha
+        ).first()
+        if existing:
+            return UploadCreateResp(upload_id=existing.id, status=existing.status)
+        raise
+
+
+        # DB-level idempotency: if (meeting_id, sha256) exists, return it
+    existing = db.query(Upload).filter(
+        Upload.meeting_id == meeting_id,
+        Upload.sha256 == sha,
+    ).first()
+    if existing:
+        return UploadCreateResp(upload_id=existing.id, status=existing.status)
+
 
     # --- NEW: persist stub result to SQLite so it survives restarts ---
     # We already produced `segs`, `bullets` above via _make_stub_result()
