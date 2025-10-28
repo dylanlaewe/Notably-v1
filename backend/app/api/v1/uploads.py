@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import BackgroundTasks
+from time import sleep
 from pydantic import BaseModel
 from starlette.status import HTTP_202_ACCEPTED
 
@@ -13,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from ...db import get_session
+from ...db import SessionLocal
 from ...models import (
     Upload,
     Transcript,
@@ -127,6 +130,7 @@ async def create_upload(
     file: UploadFile = File(...),
     meeting_id: str = Form(...),
     db: Session = Depends(get_session),
+    background_tasks: BackgroundTasks = None,
 ):
     # read once
     blob = await file.read()
@@ -135,13 +139,22 @@ async def create_upload(
     sha = _sha256(blob)
     byte_size = len(blob)
 
-    # dedupe (meeting_id, sha256)
+    # in-memory dedupe (keeps stub compatibility)
     key = (meeting_id, sha)
     if key in _INDEX:
         uid = _INDEX[key]
         rec = _UPLOADS[uid]
         return UploadCreateResp(upload_id=rec.id, status=rec.status)
 
+    # DB-level idempotency first
+    existing = db.query(Upload).filter(
+        Upload.meeting_id == meeting_id,
+        Upload.sha256 == sha,
+    ).first()
+    if existing:
+        return UploadCreateResp(upload_id=existing.id, status=existing.status)
+
+    # create in-memory record (status queued; no inline result)
     uid = str(uuid.uuid4())
     created = _now_utc()
     rec = _UploadRec(
@@ -154,19 +167,14 @@ async def create_upload(
         status="queued",
         created_at=_iso(created),
         retained_until=_iso(created + timedelta(days=90)),
+        segments=[],
+        bullets=[],
+        action_items=[],
     )
-
-    # stub: immediately mark done and attach fake result
-    segs, bullets, actions = _make_stub_result()
-    rec.segments = segs
-    rec.bullets = bullets
-    rec.action_items = actions
-    rec.status = "done"
-
     _UPLOADS[uid] = rec
     _INDEX[key] = uid
 
-        # --- NEW: also persist to SQLite so status survives restarts ---
+    # DB row as queued (no transcript/summary yet)
     db_row = Upload(
         id=uid,
         meeting_id=meeting_id,
@@ -175,10 +183,10 @@ async def create_upload(
         byte_size=rec.byte_size,
         sha256=rec.sha256,
         duration_sec=None,
-        status="done",          # mirror the stub behavior
+        status="queued",
         error=None,
-        created_at=datetime.now(timezone.utc),
-        retained_until=datetime.now(timezone.utc) + timedelta(days=90),
+        created_at=created,
+        retained_until=created + timedelta(days=90),
     )
     try:
         db.add(db_row)
@@ -192,56 +200,11 @@ async def create_upload(
             return UploadCreateResp(upload_id=existing.id, status=existing.status)
         raise
 
+    # enqueue background processor to flip to processing -> done and write results
+    background_tasks.add_task(_process_stub, uid, meeting_id)
 
-        # DB-level idempotency: if (meeting_id, sha256) exists, return it
-    existing = db.query(Upload).filter(
-        Upload.meeting_id == meeting_id,
-        Upload.sha256 == sha,
-    ).first()
-    if existing:
-        return UploadCreateResp(upload_id=existing.id, status=existing.status)
+    return UploadCreateResp(upload_id=uid, status="queued")
 
-
-    # --- NEW: persist stub result to SQLite so it survives restarts ---
-    # We already produced `segs`, `bullets` above via _make_stub_result()
-
-    # 1) Transcript
-    t = Transcript(upload_id=uid, language="en")
-    db.add(t)
-    db.flush()  # get t.id
-
-    # Insert segments and remember their DB ids by order (1-based)
-    seg_id_by_index = {}
-    for i, s in enumerate(segs, start=1):
-        seg = TranscriptSegment(
-            transcript_id=t.id,
-            t_start=s["t_start"],
-            t_end=s["t_end"],
-            text=s["text"],
-        )
-        db.add(seg)
-        db.flush()  # get seg.id
-        seg_id_by_index[i] = seg.id
-
-    # 2) Summary + bullets with FK-enforced citations
-    summary = Summary(meeting_id=meeting_id)
-    db.add(summary)
-    db.flush()  # get summary.id
-
-    for b in bullets:
-        b_row = ORMSummaryBullet(summary_id=summary.id, text=b["text"])
-        db.add(b_row)
-        db.flush()  # get b_row.id
-        for c in b.get("citations", []):
-            idx = c["segment_id"]
-            real_seg_id = seg_id_by_index.get(idx)
-            if real_seg_id is not None:
-                db.add(ORMBulletCitation(summary_bullet_id=b_row.id, segment_id=real_seg_id))
-
-    db.commit()
-
-
-    return UploadCreateResp(upload_id=uid, status=rec.status)
 
 @router.get("/uploads/{upload_id}", response_model=UploadStatusResp)
 async def get_upload(upload_id: str, db: Session = Depends(get_session)):
@@ -321,3 +284,77 @@ async def get_result(upload_id: str, db: Session = Depends(get_session)):
         transcript=TranscriptOut(language="en", segments=segments),
         summary=SummaryOut(bullets=bullets, action_items=actions),
     )
+
+def _process_stub(upload_id: str, meeting_id: str) -> None:
+    print(f"[BG] start processing {upload_id}")
+
+    """
+    Simulate background processing:
+    - status: queued -> processing -> done
+    - write transcript segments + summary with citations into SQLite
+    """
+    db = SessionLocal()
+    u = None
+    try:
+        # mark processing
+        u = db.get(Upload, upload_id)
+        if not u:
+            db.close()
+            return
+        u.status = "processing"
+        db.add(u)
+        db.commit()
+
+        # small delay so you can see the transition in /status
+        sleep(1.0)
+
+        # fabricate result
+        segs, bullets, actions = _make_stub_result()
+
+        # transcript
+        t = Transcript(upload_id=upload_id, language="en")
+        db.add(t)
+        db.flush()  # t.id
+
+        seg_id_by_index = {}
+        for i, s in enumerate(segs, start=1):
+            seg = TranscriptSegment(
+                transcript_id=t.id,
+                t_start=s["t_start"],
+                t_end=s["t_end"],
+                text=s["text"],
+            )
+            db.add(seg)
+            db.flush()
+            seg_id_by_index[i] = seg.id
+
+        # summary + bullets + citations
+        summary = Summary(meeting_id=meeting_id)
+        db.add(summary)
+        db.flush()
+
+        for b in bullets:
+            b_row = ORMSummaryBullet(summary_id=summary.id, text=b["text"])
+            db.add(b_row)
+            db.flush()
+            for c in b.get("citations", []):
+                idx = c["segment_id"]
+                real_seg_id = seg_id_by_index.get(idx)
+                if real_seg_id is not None:
+                    db.add(ORMBulletCitation(summary_bullet_id=b_row.id, segment_id=real_seg_id))
+
+            print(f"[BG] done processing {upload_id}")
+
+        # done
+        u.status = "done"
+        db.add(u)
+        db.commit()
+    except Exception as e:
+        if u:
+            u.status = "failed"
+            u.error = str(e)
+            db.add(u)
+            db.commit()
+        raise
+    finally:
+        db.close()
