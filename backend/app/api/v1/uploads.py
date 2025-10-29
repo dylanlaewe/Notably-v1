@@ -296,7 +296,6 @@ async def get_result(upload_id: str, db: Session = Depends(get_session)):
     )
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
-    print(f"[BG] start processing {upload_id}")
 
     """
     Simulate background processing:
@@ -353,7 +352,6 @@ def _process_stub(upload_id: str, meeting_id: str) -> None:
                 if real_seg_id is not None:
                     db.add(ORMBulletCitation(summary_bullet_id=b_row.id, segment_id=real_seg_id))
 
-            print(f"[BG] done processing {upload_id}")
 
         # done
         u.status = "done"
