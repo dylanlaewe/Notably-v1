@@ -2,6 +2,8 @@ from __future__ import annotations
 import hashlib
 import uuid
 import typing
+import os
+from io import BytesIO
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, List, Optional
 
@@ -10,7 +12,6 @@ from fastapi import BackgroundTasks
 from time import sleep
 from pydantic import BaseModel
 from starlette.status import HTTP_202_ACCEPTED
-
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -24,8 +25,9 @@ from ...models import (
     Summary,
     SummaryBullet as ORMSummaryBullet,
     BulletCitation as ORMBulletCitation,
+    UploadObject
 )
-
+from ...storage import get_client as get_minio_client, ensure_bucket, make_object_key
 
 
 router = APIRouter()
@@ -53,6 +55,8 @@ class _UploadRec(BaseModel):
 _UPLOADS: Dict[str, _UploadRec] = {}
 _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
 MAX_UPLOAD_BYTES = 1_000_000_000  # 1 GB cap
+MINIO_ENABLE = os.getenv("MINIO_ENABLE", "false").lower() == "true"
+
 
 # ---------------------------
 # Response models
@@ -209,6 +213,40 @@ async def create_upload(
         if existing:
             return UploadCreateResp(upload_id=existing.id, status=existing.status)
         raise
+
+            # Optional: push raw blob to MinIO
+    if MINIO_ENABLE:
+        try:
+            client = get_minio_client()
+            bucket = ensure_bucket(client)
+            object_key = make_object_key(meeting_id, uid, rec.filename)
+            client.put_object(
+                bucket,
+                object_key,
+                data=BytesIO(blob),
+                length=byte_size,
+                content_type=rec.mime_type,
+            )
+            # record where we put it
+            obj = UploadObject(
+                upload_id=uid,
+                bucket=bucket,
+                object_key=object_key,
+                content_type=rec.mime_type,
+                byte_size=rec.byte_size,
+                sha256=rec.sha256,
+            )
+            db.add(obj)
+            db.commit()
+        except Exception as e:
+            # mark failed and surface an error
+            u = db.get(Upload, uid)
+            if u:
+                u.status = "failed"
+                u.error = f"minio: {e}"
+                db.add(u)
+                db.commit()
+            raise HTTPException(status_code=500, detail="storage error")
 
     # enqueue background processor to flip to processing -> done and write results
     background_tasks.add_task(_process_stub, uid, meeting_id)

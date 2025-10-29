@@ -52,6 +52,11 @@ class Upload(Base):
         CheckConstraint("status in ('queued','processing','done','failed')", name="ck_upload_status"),
     )
 
+    objects: Mapped[List["UploadObject"]] = relationship(
+        back_populates="upload", cascade="all, delete-orphan"
+    )
+
+
     transcript: Mapped["Transcript"] = relationship(back_populates="upload", uselist=False)
 
 
@@ -86,6 +91,27 @@ class TranscriptSegment(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
 
     transcript: Mapped[Transcript] = relationship(back_populates="segments")
+
+class UploadObject(Base):
+    __tablename__ = "upload_object"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    upload_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("upload.id", ondelete="CASCADE"), nullable=False
+    )
+    bucket: Mapped[str] = mapped_column(Text, nullable=False)
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("bucket", "object_key", name="uq_bucket_object_key"),
+    )
+
+    upload: Mapped["Upload"] = relationship(back_populates="objects")
+
 
 
 # -----------------------------
