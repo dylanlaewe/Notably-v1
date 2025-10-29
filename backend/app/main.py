@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from .api.v1.uploads import router as uploads_router
 from .db import init_db
+from dotenv import load_dotenv
+load_dotenv()  # load variables from a local .env file if present
 
 app = FastAPI(title="Notably API", version="0.0.3")
 
