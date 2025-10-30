@@ -18,6 +18,8 @@ import backend.app.models  # noqa: F401  (register models)
 
 # this is the Alembic Config object, which provides access to values within the .ini file in use.
 config = context.config
+db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

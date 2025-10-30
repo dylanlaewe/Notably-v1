@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+import os
 
 # SQLite dev DB file in project root
-SQLALCHEMY_DATABASE_URL = "sqlite:///./dev.db"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+
+connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,
+)
+
 
 # check_same_thread=False lets us use the connection across threads in dev
 engine = create_engine(
