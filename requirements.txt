@@ -17,3 +17,4 @@ SQLAlchemy
 minio
 python-dotenv
 alembic
+psycopg[binary]
