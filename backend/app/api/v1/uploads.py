@@ -60,8 +60,11 @@ class _UploadRec(BaseModel):
 
 _UPLOADS: Dict[str, _UploadRec] = {}
 _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
-MAX_UPLOAD_BYTES = 1_000_000_000  # 1 GB cap
-MINIO_ENABLE = os.getenv("MINIO_ENABLE", "false").lower() == "true"
+MAX_UPLOAD_BYTES = 1_000_000_000 
+ # 1 GB cap
+def minio_enabled() -> bool:
+    return os.getenv("MINIO_ENABLE", "false").lower() == "true"
+
 
 
 # ---------------------------
@@ -220,12 +223,13 @@ async def create_upload(
             return UploadCreateResp(upload_id=existing.id, status=existing.status)
         raise
 
-            # Optional: push raw blob to MinIO
-    if MINIO_ENABLE:
+    # Optional: push raw blob to MinIO
+    if minio_enabled():
         try:
             client = get_minio_client()
             bucket = ensure_bucket(client)
             object_key = make_object_key(meeting_id, uid, rec.filename)
+
             client.put_object(
                 bucket,
                 object_key,
