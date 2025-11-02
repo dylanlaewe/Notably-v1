@@ -6,7 +6,12 @@ import subprocess
 import tempfile
 import os
 
-from .storage import get_minio_client
+# Robust import: support either get_minio_client() or get_client()
+try:
+    from .storage import get_minio_client  # preferred
+except ImportError:  # back-compat
+    from .storage import get_client as get_minio_client
+
 from .models import UploadObject
 from .db import SessionLocal
 from .models import (
@@ -19,6 +24,7 @@ from .models import (
 )
 
 from .stubs import _make_stub_result
+
 
 def _probe_duration_sec(path: str) -> float | None:
     """
@@ -36,6 +42,7 @@ def _probe_duration_sec(path: str) -> float | None:
         return float(dur) if dur is not None else None
     except Exception:
         return None
+
 
 def _minio_enabled() -> bool:
     return os.getenv("MINIO_ENABLE", "false").lower() == "true"
@@ -63,7 +70,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
         # small delay so status transition is observable
         sleep(1.0)
 
-                # --- Try to determine duration via MinIO + ffprobe (best-effort) ---
+        # --- Try to determine duration via MinIO + ffprobe (best-effort) ---
         try:
             if _minio_enabled():
                 obj = (
@@ -76,19 +83,28 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                     client = get_minio_client()
                     # stream object to a temp file
                     resp = client.get_object(obj.bucket, obj.object_key)
-                    with tempfile.NamedTemporaryFile(delete=True) as tmp:
-                        tmp.write(resp.read())
-                        tmp.flush()
-                        resp.close()
-                        dur = _probe_duration_sec(tmp.name)
-                        if dur is not None:
-                            u.duration_sec = float(dur)
-                            db.add(u)
-                            db.commit()
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=True) as tmp:
+                            tmp.write(resp.read())
+                            tmp.flush()
+                            dur = _probe_duration_sec(tmp.name)
+                            if dur is not None:
+                                u.duration_sec = float(dur)
+                                db.add(u)
+                                db.commit()
+                    finally:
+                        try:
+                            resp.close()
+                        except Exception:
+                            pass
+                        # Some MinIO clients require explicit release
+                        try:
+                            resp.release_conn()
+                        except Exception:
+                            pass
         except Exception:
             # best-effort; ignore any probe/storage errors
             pass
-
 
         # fabricate result
         segs, bullets, actions = _make_stub_result()
@@ -138,3 +154,4 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
         raise
     finally:
         db.close()
+
