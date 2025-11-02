@@ -17,9 +17,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 # RQ (optional)
-from ...queue import get_queue
-from ...tasks import process_stub
-RQ_ENABLE = os.getenv("RQ_ENABLE", "false").lower() == "true"
+from backend.app.queue import get_queue, RQ_ENABLE
+from backend.app.tasks import process_stub
 
 from ...db import get_session
 from ...db import SessionLocal
@@ -60,11 +59,11 @@ class _UploadRec(BaseModel):
 
 _UPLOADS: Dict[str, _UploadRec] = {}
 _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
-MAX_UPLOAD_BYTES = 1_000_000_000 
- # 1 GB cap
+MAX_UPLOAD_BYTES = 1_000_000_000
+# 1 GB cap
+
 def minio_enabled() -> bool:
     return os.getenv("MINIO_ENABLE", "false").lower() == "true"
-
 
 
 # ---------------------------
@@ -144,7 +143,7 @@ def _make_stub_result() -> tuple[list[dict], list[dict], list[dict]]:
 async def create_upload(
     file: UploadFile = File(...),
     meeting_id: str = Form(...),
-    duration_sec: typing.Optional[float] = Form(None), 
+    duration_sec: typing.Optional[float] = Form(None),
     db: Session = Depends(get_session),
     background_tasks: BackgroundTasks = None,
 ):
@@ -158,8 +157,6 @@ async def create_upload(
         raise HTTPException(status_code=413, detail="file too large (limit 1 GB)")
     if duration_sec is not None and duration_sec > 3600:
         raise HTTPException(status_code=422, detail="duration exceeds 60 minutes")
-
-
 
     # in-memory dedupe (keeps stub compatibility)
     key = (meeting_id, sha)
@@ -263,8 +260,9 @@ async def create_upload(
         q = get_queue()
         q.enqueue(process_stub, uid, meeting_id)
     else:
+        if background_tasks is None:
+            raise HTTPException(status_code=500, detail="background task unavailable")
         background_tasks.add_task(_process_stub, uid, meeting_id)
-
 
     return UploadCreateResp(upload_id=uid, status="queued")
 
@@ -349,11 +347,10 @@ async def get_result(upload_id: str, db: Session = Depends(get_session)):
     )
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
-
     """
     Simulate background processing:
     - status: queued -> processing -> done
-    - write transcript segments + summary with citations into SQLite
+    - write transcript segments + summary with citations into DB
     """
     db = SessionLocal()
     u = None
@@ -405,7 +402,6 @@ def _process_stub(upload_id: str, meeting_id: str) -> None:
                 if real_seg_id is not None:
                     db.add(ORMBulletCitation(summary_bullet_id=b_row.id, segment_id=real_seg_id))
 
-
         # done
         u.status = "done"
         db.add(u)
@@ -419,3 +415,4 @@ def _process_stub(upload_id: str, meeting_id: str) -> None:
         raise
     finally:
         db.close()
+
