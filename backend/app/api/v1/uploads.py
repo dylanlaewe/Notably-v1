@@ -16,6 +16,11 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+# RQ (optional)
+from ...queue import get_queue
+from ...tasks import process_stub
+RQ_ENABLE = os.getenv("RQ_ENABLE", "false").lower() == "true"
+
 from ...db import get_session
 from ...db import SessionLocal
 from ...models import (
@@ -28,6 +33,7 @@ from ...models import (
     UploadObject
 )
 from ...storage import get_client as get_minio_client, ensure_bucket, make_object_key
+from ...stubs import _make_stub_result
 
 
 router = APIRouter()
@@ -54,8 +60,11 @@ class _UploadRec(BaseModel):
 
 _UPLOADS: Dict[str, _UploadRec] = {}
 _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
-MAX_UPLOAD_BYTES = 1_000_000_000  # 1 GB cap
-MINIO_ENABLE = os.getenv("MINIO_ENABLE", "false").lower() == "true"
+MAX_UPLOAD_BYTES = 1_000_000_000 
+ # 1 GB cap
+def minio_enabled() -> bool:
+    return os.getenv("MINIO_ENABLE", "false").lower() == "true"
+
 
 
 # ---------------------------
@@ -214,12 +223,13 @@ async def create_upload(
             return UploadCreateResp(upload_id=existing.id, status=existing.status)
         raise
 
-            # Optional: push raw blob to MinIO
-    if MINIO_ENABLE:
+    # Optional: push raw blob to MinIO
+    if minio_enabled():
         try:
             client = get_minio_client()
             bucket = ensure_bucket(client)
             object_key = make_object_key(meeting_id, uid, rec.filename)
+
             client.put_object(
                 bucket,
                 object_key,
@@ -249,7 +259,12 @@ async def create_upload(
             raise HTTPException(status_code=500, detail="storage error")
 
     # enqueue background processor to flip to processing -> done and write results
-    background_tasks.add_task(_process_stub, uid, meeting_id)
+    if RQ_ENABLE:
+        q = get_queue()
+        q.enqueue(process_stub, uid, meeting_id)
+    else:
+        background_tasks.add_task(_process_stub, uid, meeting_id)
+
 
     return UploadCreateResp(upload_id=uid, status="queued")
 

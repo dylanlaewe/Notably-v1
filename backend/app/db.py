@@ -1,33 +1,26 @@
-from __future__ import annotations
+from dotenv import load_dotenv
+load_dotenv()
 
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-import os
 
-# SQLite dev DB file in project root
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
 
-connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+IS_SQLITE = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+connect_args = {"check_same_thread": False} if IS_SQLITE else {}
+
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args=connect_args,
     pool_pre_ping=True,
 )
 
+class Base(DeclarativeBase):
+    pass
 
-# check_same_thread=False lets us use the connection across threads in dev
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    pool_pre_ping=True,
-)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-SessionLocal = sessionmaker(
-    bind=engine,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False,
-)
 
 class Base(DeclarativeBase):
     """All ORM models will subclass this."""

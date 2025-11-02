@@ -18,3 +18,5 @@ minio
 python-dotenv
 alembic
 psycopg[binary]
+rq
+redis
