@@ -12,6 +12,24 @@ MINIO_BUCKET = os.getenv("MINIO_BUCKET", "notably-uploads")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 
+import os
+from minio import Minio
+
+def get_minio_client() -> Minio:
+    """
+    Build a MinIO client from env. Defaults match docker-compose:
+    - MINIO_ENDPOINT=localhost:9000
+    - MINIO_ACCESS_KEY=minioadmin
+    - MINIO_SECRET_KEY=minioadmin
+    - MINIO_SECURE=false
+    """
+    endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+    access_key = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+    secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
+    return Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+
+
 def get_client() -> Minio:
     """Create a MinIO client with env-configured credentials."""
     return Minio(

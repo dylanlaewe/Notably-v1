@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from time import sleep
+import json
+import subprocess
+import tempfile
+import os
 
+from .storage import get_minio_client
+from .models import UploadObject
 from .db import SessionLocal
 from .models import (
     Upload,
@@ -14,6 +20,25 @@ from .models import (
 
 from .stubs import _make_stub_result
 
+def _probe_duration_sec(path: str) -> float | None:
+    """
+    Return duration in seconds for media at `path` using ffprobe, or None on failure.
+    """
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", path],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data = json.loads(proc.stdout or "{}")
+        dur = data.get("format", {}).get("duration")
+        return float(dur) if dur is not None else None
+    except Exception:
+        return None
+
+def _minio_enabled() -> bool:
+    return os.getenv("MINIO_ENABLE", "false").lower() == "true"
 
 
 def process_stub(upload_id: str, meeting_id: str) -> None:
@@ -37,6 +62,33 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
 
         # small delay so status transition is observable
         sleep(1.0)
+
+                # --- Try to determine duration via MinIO + ffprobe (best-effort) ---
+        try:
+            if _minio_enabled():
+                obj = (
+                    db.query(UploadObject)
+                    .filter(UploadObject.upload_id == upload_id)
+                    .order_by(UploadObject.id.desc())
+                    .first()
+                )
+                if obj:
+                    client = get_minio_client()
+                    # stream object to a temp file
+                    resp = client.get_object(obj.bucket, obj.object_key)
+                    with tempfile.NamedTemporaryFile(delete=True) as tmp:
+                        tmp.write(resp.read())
+                        tmp.flush()
+                        resp.close()
+                        dur = _probe_duration_sec(tmp.name)
+                        if dur is not None:
+                            u.duration_sec = float(dur)
+                            db.add(u)
+                            db.commit()
+        except Exception:
+            # best-effort; ignore any probe/storage errors
+            pass
+
 
         # fabricate result
         segs, bullets, actions = _make_stub_result()
