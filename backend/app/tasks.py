@@ -18,6 +18,8 @@ from .db import SessionLocal
 from .models import Upload, UploadObject, Transcript, TranscriptSegment, Summary
 from .models import SummaryBullet as ORMSummaryBullet, BulletCitation as ORMBulletCitation
 from .stubs import _make_stub_result
+from .transcribe import maybe_transcribe_from_minio
+
 
 
 # ---------------------------
@@ -169,6 +171,9 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                             os.remove(tmp_path)
                         except Exception:
                             pass
+   
+                    _ = maybe_transcribe_from_minio(db, u, obj)
+
         except Exception as e:
             # best-effort: never fail the pipeline on storage/probe issues
             print(f"[MINIO] skip ({e})", flush=True)
