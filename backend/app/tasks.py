@@ -8,18 +8,24 @@ import os
 import hashlib
 from io import BytesIO
 
-# Robust import in case storage exposes get_client instead
+# MinIO client (support old name get_client)
 try:
     from .storage import get_minio_client  # preferred
-except ImportError:  # back-compat
-    from .storage import get_client as get_minio_client
+except ImportError:
+    from .storage import get_client as get_minio_client  # back-compat
 
 from .db import SessionLocal
-from .models import Upload, UploadObject, Transcript, TranscriptSegment, Summary
-from .models import SummaryBullet as ORMSummaryBullet, BulletCitation as ORMBulletCitation
+from .models import (
+    Upload,
+    UploadObject,
+    Transcript,
+    TranscriptSegment,
+    Summary,
+    SummaryBullet as ORMSummaryBullet,
+    BulletCitation as ORMBulletCitation,
+)
 from .stubs import _make_stub_result
 from .transcribe import maybe_transcribe_from_minio
-
 
 
 # ---------------------------
@@ -30,10 +36,7 @@ def _env_true(name: str, default: str = "false") -> bool:
 
 
 def _probe_duration_sec(path: str) -> float | None:
-    """
-    Return duration (seconds) using ffprobe, or None on failure.
-    Short timeout & non-interactive to avoid worker hangs.
-    """
+    """Return duration (s) via ffprobe, or None. Timeout to avoid hangs."""
     try:
         p = subprocess.run(
             ["ffprobe", "-v", "error", "-hide_banner",
@@ -50,11 +53,7 @@ def _probe_duration_sec(path: str) -> float | None:
 
 
 def _ffmpeg_to_wav(src_path: str, dst_path: str) -> None:
-    """
-    Convert input media to 16 kHz mono WAV.
-    Short timeout & -nostdin so we never block.
-    Raises RuntimeError on failure/timeout.
-    """
+    """Transcode to 16 kHz mono WAV. Non-interactive + timeout."""
     try:
         p = subprocess.run(
             ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
@@ -78,10 +77,11 @@ def _sha256_bytes(b: bytes) -> str:
 # ---------------------------
 def process_stub(upload_id: str, meeting_id: str) -> None:
     """
-    Simulate background processing for an upload:
-      queued -> processing -> done
-    Persists stub transcript segments + summary + citations to the DB.
-    Best-effort: probe duration via ffprobe and write 16kHz mono WAV to MinIO.
+    Background job:
+      - status: queued -> processing -> done
+      - If MINIO_ENABLE: probe duration, write audio-16k.wav
+      - If WHISPER_ENABLE (+ key): transcribe via Whisper
+      - Always write a Summary (stub bullets; cite available segments)
     """
     db = SessionLocal()
     u = None
@@ -95,12 +95,14 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
         db.add(u)
         db.commit()
 
-        # small delay so you can see the transition when polling status
+        # small delay so you can observe the transition
         sleep(1.0)
 
-        # --- MinIO best-effort: probe + transcode to audio-16k.wav ---
+        # --- MinIO best-effort: find object, probe, and write 16k WAV ---
+        obj: UploadObject | None = None
         try:
             if _env_true("MINIO_ENABLE"):
+                # latest object for this upload
                 obj = (
                     db.query(UploadObject)
                     .filter(UploadObject.upload_id == upload_id)
@@ -110,7 +112,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                 if obj:
                     client = get_minio_client()
 
-                    # 1) download original to a real path (safer than in-memory stream)
+                    # download original to a temp path
                     fd, tmp_path = tempfile.mkstemp(
                         suffix=os.path.splitext(obj.object_key)[1] or ".bin"
                     )
@@ -118,7 +120,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                     try:
                         client.fget_object(obj.bucket, obj.object_key, tmp_path)
 
-                        # 2) duration (non-fatal)
+                        # duration (non-fatal)
                         print(f"[PROBE] ffprobe {tmp_path}", flush=True)
                         dur = _probe_duration_sec(tmp_path)
                         if dur is not None:
@@ -127,7 +129,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                             db.commit()
                             print(f"[PROBE] duration={u.duration_sec:.3f}s", flush=True)
 
-                        # 3) transcode -> 16kHz mono WAV (non-fatal)
+                        # transcode -> 16kHz mono WAV (non-fatal)
                         wav_fd, wav_path = tempfile.mkstemp(suffix=".wav")
                         os.close(wav_fd)
                         try:
@@ -137,10 +139,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                                 data = f.read()
                             if data:
                                 wav_key = obj.object_key.rsplit("/", 1)[0] + "/audio-16k.wav"
-                                print(
-                                    f"[AUDIO16K] uploading {wav_key} (bytes={len(data)})",
-                                    flush=True,
-                                )
+                                print(f"[AUDIO16K] uploading {wav_key} (bytes={len(data)})", flush=True)
                                 client.put_object(
                                     obj.bucket,
                                     wav_key,
@@ -171,51 +170,78 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                             os.remove(tmp_path)
                         except Exception:
                             pass
-   
-                    _ = maybe_transcribe_from_minio(db, u, obj)
-
         except Exception as e:
-            # best-effort: never fail the pipeline on storage/probe issues
             print(f"[MINIO] skip ({e})", flush=True)
 
-        # --- fabricate stub result (transcript + bullets + citations) ---
-        segs, bullets, actions = _make_stub_result()
+        # --- Optional: Whisper transcription (writes Transcript+Segments on success) ---
+        wrote = False
+        try:
+            if obj is not None:  # only attempt if we had an object
+                wrote = maybe_transcribe_from_minio(db, u, obj)
+        except Exception as e:
+            print(f"[WHISPER] skip ({e})", flush=True)
+            wrote = False
 
-        # transcript
-        t = Transcript(upload_id=upload_id, language="en")
-        db.add(t)
-        db.flush()  # t.id
-
+        # --- If Whisper didn't write a transcript, fabricate stub transcript ---
+        t: Transcript | None = None
         seg_id_by_index: dict[int, int] = {}
-        for i, s in enumerate(segs, start=1):
-            seg = TranscriptSegment(
-                transcript_id=t.id,
-                t_start=s["t_start"],
-                t_end=s["t_end"],
-                text=s["text"],
-            )
-            db.add(seg)
-            db.flush()
-            seg_id_by_index[i] = seg.id
 
-        # summary + bullets + citations
+        if not wrote:
+            segs, bullets, actions = _make_stub_result()
+
+            # transcript (stub)
+            t = Transcript(upload_id=upload_id, language="en")
+            db.add(t)
+            db.flush()  # t.id
+
+            for i, s in enumerate(segs, start=1):
+                seg = TranscriptSegment(
+                    transcript_id=t.id,
+                    t_start=s["t_start"],
+                    t_end=s["t_end"],
+                    text=s["text"],
+                )
+                db.add(seg)
+                db.flush()
+                seg_id_by_index[i] = seg.id
+        else:
+            # Fetch the transcript created by Whisper (latest for this upload)
+            t = (
+                db.query(Transcript)
+                .filter(Transcript.upload_id == upload_id)
+                .order_by(Transcript.id.desc())
+                .first()
+            )
+            # Build a minimal index over the first two segments so our stub bullets can cite something real
+            if t:
+                segs = (
+                    db.query(TranscriptSegment)
+                    .filter(TranscriptSegment.transcript_id == t.id)
+                    .order_by(TranscriptSegment.id.asc())
+                    .all()
+                )
+                for i, seg in enumerate(segs, start=1):
+                    seg_id_by_index[i] = seg.id
+
+        # --- Always create a Summary with simple bullets + citations ---
         summary = Summary(meeting_id=meeting_id)
         db.add(summary)
         db.flush()
 
-        for b in bullets:
-            b_row = ORMSummaryBullet(summary_id=summary.id, text=b["text"])
-            db.add(b_row)
-            db.flush()
-            for c in b.get("citations", []):
-                idx = c["segment_id"]
-                real_seg_id = seg_id_by_index.get(idx)
-                if real_seg_id is not None:
-                    db.add(
-                        ORMBulletCitation(
-                            summary_bullet_id=b_row.id, segment_id=real_seg_id
-                        )
-                    )
+        # Two generic bullets that cite segment 1 and 2 when available
+        b1_text = "Transcript captured."
+        b2_text = "Upload pipeline OK; next: summarize with GPT and cite segments."
+        b1 = ORMSummaryBullet(summary_id=summary.id, text=b1_text)
+        b2 = ORMSummaryBullet(summary_id=summary.id, text=b2_text)
+        db.add(b1); db.flush()
+        db.add(b2); db.flush()
+
+        if 1 in seg_id_by_index:
+            db.add(ORMBulletCitation(summary_bullet_id=b1.id, segment_id=seg_id_by_index[1]))
+        if 2 in seg_id_by_index:
+            db.add(ORMBulletCitation(summary_bullet_id=b2.id, segment_id=seg_id_by_index[2]))
+
+        db.commit()
 
         # done
         u.status = "done"
