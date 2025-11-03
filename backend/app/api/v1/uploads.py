@@ -137,6 +137,10 @@ class TagListIn(BaseModel):
 class TagListOut(BaseModel):
     tags: List[str]
 
+class PresignedURLResp(BaseModel):
+    url: str
+    expires_at: str  # ISO8601
+
 
 # ---------------------------
 # Helpers
@@ -161,6 +165,31 @@ def _make_stub_result() -> tuple[list[dict], list[dict], list[dict]]:
     bullets = [b1, b2]
     actions = [{"id": str(uuid.uuid4()), "text": "Connect UI to POST /v1/uploads.", "citations": [{"segment_id": 2}]}]
     return segs, bullets, actions
+
+def _env_true(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "y"}
+
+def _pick_upload_object(db: Session, upload_id: str, kind: str) -> Optional[UploadObject]:
+    q = (
+        db.query(UploadObject)
+        .filter(UploadObject.upload_id == upload_id)
+        .order_by(UploadObject.id.desc())
+    )
+    rows = q.all()
+    if not rows:
+        return None
+    if kind == "audio16k":
+        for r in rows:
+            if r.object_key.endswith("/audio-16k.wav"):
+                return r
+        return None
+    # "original" (default): prefer the latest that is NOT our derived audio-16k
+    for r in rows:
+        if not r.object_key.endswith("/audio-16k.wav"):
+            return r
+    # fallback: if somehow only audio-16k exists, return it
+    return rows[0]
+
 
 # ---------------------------
 # Routes
@@ -510,6 +539,38 @@ async def add_tags(upload_id: str, payload: TagListIn, db: Session = Depends(get
         .all()
     )
     return TagListOut(tags=[row[0] for row in current])
+
+@router.get("/uploads/{upload_id}/download", response_model=PresignedURLResp)
+async def presigned_download(
+    upload_id: str,
+    kind: str = "original",  # "original" | "audio16k"
+    db: Session = Depends(get_session),
+):
+    if not _env_true("MINIO_ENABLE"):
+        raise HTTPException(status_code=400, detail="MinIO disabled")
+
+    # ensure upload exists (and for basic authz in future)
+    u = db.get(Upload, upload_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    kind = kind.lower().strip()
+    if kind not in {"original", "audio16k"}:
+        raise HTTPException(status_code=422, detail="kind must be 'original' or 'audio16k'")
+
+    obj = _pick_upload_object(db, upload_id, kind)
+    if not obj:
+        raise HTTPException(status_code=404, detail=f"No object for kind '{kind}'")
+
+    try:
+        client = get_minio_client()
+        expires = timedelta(hours=1)
+        # MinIO Python client
+        url = client.presigned_get_object(obj.bucket, obj.object_key, expires=expires)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"presign error: {e}")
+
+    return PresignedURLResp(url=url, expires_at=_iso(_now_utc() + expires))
 
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
