@@ -225,8 +225,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                 for i, seg in enumerate(segs, start=1):
                     seg_id_by_index[i] = seg.id
 
-        # --- Always create a Summary with simple bullets + citations ---
-                # --- Try GPT summary; fall back to simple stub summary with citations ---
+        # --- Try GPT summary; fall back to simple stub summary with citations ---
         wrote_summary = False
         if t is not None:
             wrote_summary = maybe_generate_summary(db, meeting_id, t)
