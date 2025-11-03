@@ -555,6 +555,12 @@ async def presigned_download(
       - ttl:        seconds (default 3600), clamped to [60, 86400]
       - filename:   optional download name (sets Content-Disposition)
     """
+    db: Session = Depends(get_session),
+):
+    if not _env_true("MINIO_ENABLE"):
+        raise HTTPException(status_code=400, detail="MinIO disabled")
+
+    # ensure upload exists (and for basic authz in future)
     u = db.get(Upload, upload_id)
     if not u:
         raise HTTPException(status_code=404, detail="Upload not found")
@@ -606,6 +612,23 @@ async def presigned_download(
 
     expires_at = _iso(_now_utc() + timedelta(seconds=int(ttl)))
     return {"url": url, "expires_at": expires_at}
+    kind = kind.lower().strip()
+    if kind not in {"original", "audio16k"}:
+        raise HTTPException(status_code=422, detail="kind must be 'original' or 'audio16k'")
+
+    obj = _pick_upload_object(db, upload_id, kind)
+    if not obj:
+        raise HTTPException(status_code=404, detail=f"No object for kind '{kind}'")
+
+    try:
+        client = get_minio_client()
+        expires = timedelta(hours=1)
+        # MinIO Python client
+        url = client.presigned_get_object(obj.bucket, obj.object_key, expires=expires)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"presign error: {e}")
+
+    return PresignedURLResp(url=url, expires_at=_iso(_now_utc() + expires))
 
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
