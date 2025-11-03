@@ -26,8 +26,6 @@ from .models import (
 )
 from .stubs import _make_stub_result
 from .transcribe import maybe_transcribe_from_minio
-from .summarize import maybe_generate_summary
-
 
 
 # ---------------------------
@@ -225,28 +223,10 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                 for i, seg in enumerate(segs, start=1):
                     seg_id_by_index[i] = seg.id
 
-        # --- Try GPT summary; fall back to simple stub summary with citations ---
-        wrote_summary = False
-        if t is not None:
-            wrote_summary = maybe_generate_summary(db, meeting_id, t)
-
-        if not wrote_summary:
-            # existing simple summary fallback (two bullets citing seg 1 & 2 if present)
-            summary = Summary(meeting_id=meeting_id)
-            db.add(summary); db.flush()
-
-            b1 = ORMSummaryBullet(summary_id=summary.id, text="Transcript captured.")
-            b2 = ORMSummaryBullet(summary_id=summary.id, text="Upload pipeline OK; next: summarize with GPT and cite segments.")
-            db.add(b1); db.flush()
-            db.add(b2); db.flush()
-
-            if 1 in seg_id_by_index:
-                db.add(ORMBulletCitation(summary_bullet_id=b1.id, segment_id=seg_id_by_index[1]))
-            if 2 in seg_id_by_index:
-                db.add(ORMBulletCitation(summary_bullet_id=b2.id, segment_id=seg_id_by_index[2]))
-
-            db.commit()
-
+        # --- Always create a Summary with simple bullets + citations ---
+        summary = Summary(meeting_id=meeting_id)
+        db.add(summary)
+        db.flush()
 
         # Two generic bullets that cite segment 1 and 2 when available
         b1_text = "Transcript captured."
