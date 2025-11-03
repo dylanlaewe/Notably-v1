@@ -15,6 +15,8 @@ from starlette.status import HTTP_202_ACCEPTED
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from fastapi import Response
+from ...export_pdf import render_meeting_pdf
 
 
 # RQ (optional)
@@ -431,6 +433,23 @@ async def search_segments(
             )
         )
     return out
+
+@router.get("/exports/pdf")
+async def export_pdf(meeting_id: str, db: Session = Depends(get_session)):
+    """
+    Render a minimal PDF for a meeting: transcript + summary bullets.
+    """
+    try:
+        pdf_bytes = render_meeting_pdf(db, meeting_id)
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    if not pdf_bytes:
+        raise HTTPException(status_code=404, detail="Nothing to export")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="meeting-{meeting_id}.pdf"'},
+    )
 
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
