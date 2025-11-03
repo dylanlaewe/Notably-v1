@@ -156,3 +156,20 @@ class BulletCitation(Base):
     )
 
     bullet: Mapped[SummaryBullet] = relationship(back_populates="citations")
+
+# --- Tags ---
+from sqlalchemy import UniqueConstraint, ForeignKey
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+
+class Tag(Base):
+    __tablename__ = "tag"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+
+class UploadTag(Base):
+    __tablename__ = "upload_tag"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_id: Mapped[str] = mapped_column(ForeignKey("upload.id", ondelete="CASCADE"), index=True, nullable=False)
+    tag_id: Mapped[int] = mapped_column(ForeignKey("tag.id", ondelete="CASCADE"), index=True, nullable=False)
+
+    __table_args__ = (UniqueConstraint("upload_id", "tag_id", name="uq_upload_tag"),)
