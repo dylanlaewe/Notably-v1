@@ -544,6 +544,17 @@ async def add_tags(upload_id: str, payload: TagListIn, db: Session = Depends(get
 async def presigned_download(
     upload_id: str,
     kind: str = "original",  # "original" | "audio16k"
+    ttl: int = Query(3600, ge=60, le=86400),
+    filename: Optional[str] = Query(None),
+    db: Session = Depends(get_session),
+):
+    """
+    Return a presigned GET URL for the upload object.
+    Query params:
+      - kind:       "original" (default) or "audio16k"
+      - ttl:        seconds (default 3600), clamped to [60, 86400]
+      - filename:   optional download name (sets Content-Disposition)
+    """
     db: Session = Depends(get_session),
 ):
     if not _env_true("MINIO_ENABLE"):
@@ -554,6 +565,53 @@ async def presigned_download(
     if not u:
         raise HTTPException(status_code=404, detail="Upload not found")
 
+    objs = (
+        db.query(UploadObject)
+        .filter(UploadObject.upload_id == upload_id)
+        .order_by(UploadObject.id.desc())
+        .all()
+    )
+    if not objs:
+        raise HTTPException(status_code=404, detail="No stored object")
+
+    bucket = None
+    object_key = None
+
+    if kind == "audio16k":
+        for o in objs:
+            if o.object_key.endswith("/audio-16k.wav"):
+                bucket, object_key = o.bucket, o.object_key
+                break
+        if object_key is None:
+            raise HTTPException(status_code=404, detail="audio16k not available yet")
+    else:
+        for o in objs:
+            if not o.object_key.endswith("/audio-16k.wav"):
+                bucket, object_key = o.bucket, o.object_key
+                break
+
+    if not bucket or not object_key:
+        raise HTTPException(status_code=404, detail="Object not found")
+
+    if not minio_enabled():
+        raise HTTPException(status_code=400, detail="MinIO disabled")
+
+    client = get_minio_client()
+
+    headers = None
+    if filename:
+        headers = {"response-content-disposition": f'attachment; filename="{filename}"'}
+
+    from datetime import timedelta
+    url = client.presigned_get_object(
+        bucket,
+        object_key,
+        expires=timedelta(seconds=int(ttl)),
+        response_headers=headers,
+    )
+
+    expires_at = _iso(_now_utc() + timedelta(seconds=int(ttl)))
+    return {"url": url, "expires_at": expires_at}
     kind = kind.lower().strip()
     if kind not in {"original", "audio16k"}:
         raise HTTPException(status_code=422, detail="kind must be 'original' or 'audio16k'")
