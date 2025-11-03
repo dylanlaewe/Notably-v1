@@ -1,7 +1,7 @@
 # backend/app/summarize.py
 from __future__ import annotations
-import os, json
-from typing import List, Dict
+import os, json, time
+from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -12,16 +12,33 @@ from .models import (
     BulletCitation as ORMBulletCitation,
 )
 
-# Optional OpenAI import; gated by env and presence of package
+# Optional OpenAI import; everything is gated so the app still runs without it
 try:
-    from openai import OpenAI  # pip install openai>=1.52.0
+    from openai import OpenAI  # pip install "openai>=1.52.0"
 except Exception:
     OpenAI = None  # type: ignore
 
 
-def gpt_enabled() -> bool:
-    return os.getenv("GPT_ENABLE", "false").lower() in {"1", "true", "yes", "y"}
+# ---------------------------
+# Helpers / env knobs
+# ---------------------------
+def _env_true(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "y"}
 
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+def gpt_enabled() -> bool:
+    return _env_true("GPT_ENABLE", "false")
+
+def _model_name() -> str:
+    return os.getenv("GPT_MODEL", "gpt-4o-mini")
 
 def _get_client():
     if OpenAI is None:
@@ -31,6 +48,9 @@ def _get_client():
     return OpenAI()
 
 
+# ---------------------------
+# Data shaping
+# ---------------------------
 def _segments_payload(db: Session, transcript: Transcript) -> List[Dict]:
     segs = (
         db.query(TranscriptSegment)
@@ -38,7 +58,7 @@ def _segments_payload(db: Session, transcript: Transcript) -> List[Dict]:
         .order_by(TranscriptSegment.id.asc())
         .all()
     )
-    max_segs = int(os.getenv("SUMMARY_MAX_SEGS", "40"))
+    max_segs = _int_env("SUMMARY_MAX_SEGS", 40)
     out: List[Dict] = []
     for s in segs[:max_segs]:
         out.append(
@@ -52,13 +72,13 @@ def _segments_payload(db: Session, transcript: Transcript) -> List[Dict]:
     return out
 
 
-def _model_name() -> str:
-    return os.getenv("GPT_MODEL", "gpt-4o-mini")
-
-
+# ---------------------------
+# OpenAI call (retry + timeout + eval logging)
+# ---------------------------
 def _call_openai_for_bullets(segments: List[Dict]) -> Dict:
     """
-    Expect pure JSON:
+    Robust wrapper for the OpenAI chat call.
+    Returns strict JSON:
       {"bullets":[{"text":str,"citations":[{"segment_id":int}]}],
        "action_items":[{"text":str,"citations":[{"segment_id":int}]}]}
     """
@@ -66,32 +86,83 @@ def _call_openai_for_bullets(segments: List[Dict]) -> Dict:
     if client is None:
         raise RuntimeError("OpenAI client not available")
 
+    # Tunables
+    max_retries = _int_env("GPT_MAX_RETRY", 2)
+    req_timeout = _int_env("GPT_REQUEST_TIMEOUT_SECONDS", 15)  # seconds
+    max_tokens  = _int_env("GPT_MAX_TOKENS", 500)
+    eval_mode   = _env_true("EVAL_MODE", "false")
+
     sys = (
-        "You produce concise meeting bullets with citations to transcript segment IDs.\n"
-        "Output ONLY JSON with keys `bullets` and `action_items`. No prose outside JSON."
+        "You produce concise meeting bullets with citations to transcript segment IDs. "
+        "Output ONLY JSON with keys `bullets` and `action_items`. "
+        "Each citation must be an object {{\"segment_id\": <int>}} referencing a provided segment id. "
+        "No prose outside JSON."
     )
     usr = json.dumps({"segments": segments}, ensure_ascii=False)
 
-    resp = client.chat.completions.create(
-        model=_model_name(),
-        messages=[{"role": "system", "content": sys}, {"role": "user", "content": usr}],
-        temperature=0,
-        max_tokens=500,
-    )
-    content = resp.choices[0].message.content or "{}"
-    try:
-        return json.loads(content)
-    except Exception:
-        start = content.find("{")
-        end = content.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(content[start : end + 1])
-        raise
+    last_err: Optional[Exception] = None
+    t0 = _now_ms()
+    for attempt in range(max_retries + 1):
+        try:
+            resp = client.chat.completions.create(
+                model=_model_name(),
+                messages=[
+                    {"role": "system", "content": sys},
+                    {"role": "user", "content": usr},
+                ],
+                temperature=0,
+                max_tokens=max_tokens,
+                timeout=req_timeout,  # supported by openai>=1.0 client
+            )
+            latency_ms = _now_ms() - t0
+
+            content = resp.choices[0].message.content or "{}"
+            try:
+                data = json.loads(content)
+            except Exception:
+                # permissive recovery: take the largest JSON-looking block
+                start = content.find("{")
+                end = content.rfind("}")
+                if start >= 0 and end > start:
+                    data = json.loads(content[start : end + 1])
+                else:
+                    raise
+
+            if eval_mode:
+                usage = getattr(resp, "usage", None) or {}
+                eval_blob = {
+                    "evt": "gpt_summary",
+                    "model": _model_name(),
+                    "attempt": attempt,
+                    "latency_ms": latency_ms,
+                    "segments_in": len(segments),
+                    "prompt_tokens": getattr(usage, "prompt_tokens", None)
+                        if hasattr(usage, "prompt_tokens") else (usage.get("prompt_tokens") if isinstance(usage, dict) else None),
+                    "completion_tokens": getattr(usage, "completion_tokens", None)
+                        if hasattr(usage, "completion_tokens") else (usage.get("completion_tokens") if isinstance(usage, dict) else None),
+                    "total_tokens": getattr(usage, "total_tokens", None)
+                        if hasattr(usage, "total_tokens") else (usage.get("total_tokens") if isinstance(usage, dict) else None),
+                }
+                print("[EVAL]", json.dumps(eval_blob), flush=True)
+            return data
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(0.5 * (attempt + 1))
+            else:
+                break
+
+    # Exhausted retries
+    assert last_err is not None
+    raise last_err
 
 
+# ---------------------------
+# Public entrypoint
+# ---------------------------
 def maybe_generate_summary(db: Session, meeting_id: str, transcript: Transcript) -> bool:
     """
-    If GPT is enabled (env + key) and there are segments, write a Summary with
+    If GPT is enabled (env + key) and segments exist, write a Summary with
     bullets + citations. Returns True if written, else False.
     """
     if not gpt_enabled():
