@@ -16,6 +16,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+
 # RQ (optional)
 from backend.app.queue import get_queue, RQ_ENABLE
 from backend.app.tasks import process_stub
@@ -91,6 +92,17 @@ class Segment(BaseModel):
     t_start: float
     t_end: float
     text: str
+
+class SearchHit(BaseModel):
+    upload_id: str
+    meeting_id: str
+    transcript_id: str 
+    segment_id: int
+    t_start: float
+    t_end: float
+    text: str
+    filename: str
+
 
 class BulletCitation(BaseModel):
     segment_id: int
@@ -372,6 +384,50 @@ async def list_uploads(
                 error=u.error,
                 created_at=u.created_at.isoformat() if u.created_at else None,
                 retained_until=u.retained_until.isoformat() if u.retained_until else None,
+            )
+        )
+    return out
+
+@router.get("/search", response_model=List[SearchHit])
+async def search_segments(
+    q: str,
+    meeting_id: Optional[str] = None,
+    limit: int = 25,
+    offset: int = 0,
+    db: Session = Depends(get_session),
+):
+    """
+    Case-insensitive substring search over TranscriptSegment.text.
+    Optional meeting_id filter. Simple pagination via limit/offset.
+    """
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    # Join Upload -> Transcript -> TranscriptSegment
+    qry = (
+        db.query(Upload, Transcript, TranscriptSegment)
+        .join(Transcript, Transcript.upload_id == Upload.id)
+        .join(TranscriptSegment, TranscriptSegment.transcript_id == Transcript.id)
+        .filter(TranscriptSegment.text.ilike(f"%{q}%"))
+        .order_by(TranscriptSegment.id.asc())
+    )
+    if meeting_id:
+        qry = qry.filter(Upload.meeting_id == meeting_id)
+
+    rows = qry.offset(offset).limit(limit).all()
+
+    out: List[SearchHit] = []
+    for u, t, s in rows:
+        out.append(
+            SearchHit(
+                upload_id=u.id,
+                meeting_id=u.meeting_id,
+                transcript_id=str(t.id),
+                segment_id=s.id,
+                t_start=float(s.t_start or 0.0),
+                t_end=float(s.t_end or 0.0),
+                text=s.text or "",
+                filename=u.filename or "",
             )
         )
     return out
