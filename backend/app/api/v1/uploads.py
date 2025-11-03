@@ -15,7 +15,9 @@ from starlette.status import HTTP_202_ACCEPTED
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from fastapi import Response
+from fastapi import Query
 from ...export_pdf import render_meeting_pdf
 
 
@@ -32,10 +34,13 @@ from ...models import (
     Summary,
     SummaryBullet as ORMSummaryBullet,
     BulletCitation as ORMBulletCitation,
-    UploadObject
+    UploadObject,
+    Tag,
+    UploadTag,
 )
 from ...storage import get_client as get_minio_client, ensure_bucket, make_object_key
 from ...stubs import _make_stub_result
+from ...models import Tag as ORMTag, UploadTag as ORMUploadTag
 
 
 router = APIRouter()
@@ -125,6 +130,13 @@ class TranscriptOut(BaseModel):
 class UploadResultResp(BaseModel):
     transcript: TranscriptOut
     summary: SummaryOut
+
+class TagListIn(BaseModel):
+    tags: List[str]
+
+class TagListOut(BaseModel):
+    tags: List[str]
+
 
 # ---------------------------
 # Helpers
@@ -361,34 +373,40 @@ async def get_result(upload_id: str, db: Session = Depends(get_session)):
     )
 
 
-@router.get("/uploads", response_model=List[UploadStatusResp])
+@router.get("/uploads", response_model=list[UploadStatusResp])
 async def list_uploads(
     meeting_id: Optional[str] = None,
+    tag: Optional[str] = Query(None),
     limit: int = 25,
     db: Session = Depends(get_session),
 ):
-    q = db.query(Upload).order_by(Upload.created_at.desc())
+    q = db.query(Upload)
     if meeting_id:
         q = q.filter(Upload.meeting_id == meeting_id)
-    rows = q.limit(max(1, min(limit, 100))).all()
-    out = []
-    for u in rows:
-        out.append(
-            UploadStatusResp(
-                id=u.id,
-                meeting_id=u.meeting_id,
-                filename=u.filename,
-                mime_type=u.mime_type,
-                byte_size=u.byte_size,
-                sha256=u.sha256,
-                duration_sec=float(u.duration_sec) if u.duration_sec is not None else None,
-                status=u.status,
-                error=u.error,
-                created_at=u.created_at.isoformat() if u.created_at else None,
-                retained_until=u.retained_until.isoformat() if u.retained_until else None,
-            )
+    if tag:
+        q = (
+            q.join(ORMUploadTag, ORMUploadTag.upload_id == Upload.id)
+             .join(ORMTag, ORMTag.id == ORMUploadTag.tag_id)
+             .filter(ORMTag.name == tag)
         )
-    return out
+    q = q.order_by(Upload.created_at.desc()).limit(limit)
+    rows = q.all()
+    return [
+        UploadStatusResp(
+            id=u.id,
+            meeting_id=u.meeting_id,
+            filename=u.filename or "",
+            mime_type=u.mime_type or "application/octet-stream",
+            byte_size=u.byte_size,
+            sha256=u.sha256,
+            duration_sec=float(u.duration_sec) if u.duration_sec is not None else None,
+            status=u.status,
+            error=u.error,
+            created_at=u.created_at.isoformat() if u.created_at else "",
+            retained_until=u.retained_until.isoformat() if u.retained_until else None,
+        )
+        for u in rows
+    ]
 
 @router.get("/search", response_model=List[SearchHit])
 async def search_segments(
@@ -450,6 +468,48 @@ async def export_pdf(meeting_id: str, db: Session = Depends(get_session)):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="meeting-{meeting_id}.pdf"'},
     )
+
+@router.post("/uploads/{upload_id}/tags", response_model=TagListOut)
+async def add_tags(upload_id: str, payload: TagListIn, db: Session = Depends(get_session)):
+    u = db.get(Upload, upload_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    names = [n.strip() for n in (payload.tags or []) if n and n.strip()]
+    if not names:
+        return TagListOut(tags=[])
+
+    # find-or-create tags
+    tag_map = {}
+    for name in names:
+        t = db.query(Tag).filter(func.lower(Tag.name) == name.lower()).first()
+        if not t:
+            t = Tag(name=name)
+            db.add(t)
+            db.flush()
+        tag_map[name] = t
+
+    # link tags to this upload (ignore if already linked)
+    for t in tag_map.values():
+        exists = (
+            db.query(UploadTag)
+            .filter(UploadTag.upload_id == upload_id, UploadTag.tag_id == t.id)
+            .first()
+        )
+        if not exists:
+            db.add(UploadTag(upload_id=upload_id, tag_id=t.id))
+
+    db.commit()
+
+    # return current tag names for this upload
+    current = (
+        db.query(Tag.name)
+        .join(UploadTag, UploadTag.tag_id == Tag.id)
+        .filter(UploadTag.upload_id == upload_id)
+        .order_by(Tag.name.asc())
+        .all()
+    )
+    return TagListOut(tags=[row[0] for row in current])
 
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
