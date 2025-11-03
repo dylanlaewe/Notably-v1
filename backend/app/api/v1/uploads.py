@@ -346,6 +346,37 @@ async def get_result(upload_id: str, db: Session = Depends(get_session)):
         summary=SummaryOut(bullets=bullets, action_items=actions),
     )
 
+
+@router.get("/uploads", response_model=List[UploadStatusResp])
+async def list_uploads(
+    meeting_id: Optional[str] = None,
+    limit: int = 25,
+    db: Session = Depends(get_session),
+):
+    q = db.query(Upload).order_by(Upload.created_at.desc())
+    if meeting_id:
+        q = q.filter(Upload.meeting_id == meeting_id)
+    rows = q.limit(max(1, min(limit, 100))).all()
+    out = []
+    for u in rows:
+        out.append(
+            UploadStatusResp(
+                id=u.id,
+                meeting_id=u.meeting_id,
+                filename=u.filename,
+                mime_type=u.mime_type,
+                byte_size=u.byte_size,
+                sha256=u.sha256,
+                duration_sec=float(u.duration_sec) if u.duration_sec is not None else None,
+                status=u.status,
+                error=u.error,
+                created_at=u.created_at.isoformat() if u.created_at else None,
+                retained_until=u.retained_until.isoformat() if u.retained_until else None,
+            )
+        )
+    return out
+
+
 def _process_stub(upload_id: str, meeting_id: str) -> None:
     """
     Simulate background processing:
