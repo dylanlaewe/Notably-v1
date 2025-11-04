@@ -5,7 +5,7 @@ import typing
 import os
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple, List, Optional, Literal
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi import BackgroundTasks
@@ -543,90 +543,43 @@ async def add_tags(upload_id: str, payload: TagListIn, db: Session = Depends(get
 @router.get("/uploads/{upload_id}/download", response_model=PresignedURLResp)
 async def presigned_download(
     upload_id: str,
-    kind: str = "original",  # "original" | "audio16k"
+    kind: Literal["original", "audio16k"] = "original",
     ttl: int = Query(3600, ge=60, le=86400),
     filename: Optional[str] = Query(None),
     db: Session = Depends(get_session),
 ):
-    """
-    Return a presigned GET URL for the upload object.
-    Query params:
-      - kind:       "original" (default) or "audio16k"
-      - ttl:        seconds (default 3600), clamped to [60, 86400]
-      - filename:   optional download name (sets Content-Disposition)
-    """
-    db: Session = Depends(get_session),
-):
-    if not _env_true("MINIO_ENABLE"):
+    # 1) feature flag
+    if not minio_enabled():
         raise HTTPException(status_code=400, detail="MinIO disabled")
 
-    # ensure upload exists (and for basic authz in future)
+    # 2) existence check
     u = db.get(Upload, upload_id)
     if not u:
         raise HTTPException(status_code=404, detail="Upload not found")
 
-    objs = (
-        db.query(UploadObject)
-        .filter(UploadObject.upload_id == upload_id)
-        .order_by(UploadObject.id.desc())
-        .all()
-    )
-    if not objs:
-        raise HTTPException(status_code=404, detail="No stored object")
-
-    bucket = None
-    object_key = None
-
+    # 3) pick object by kind
+    q = db.query(UploadObject).filter(UploadObject.upload_id == upload_id)
     if kind == "audio16k":
-        for o in objs:
-            if o.object_key.endswith("/audio-16k.wav"):
-                bucket, object_key = o.bucket, o.object_key
-                break
-        if object_key is None:
-            raise HTTPException(status_code=404, detail="audio16k not available yet")
+        q = q.filter(UploadObject.object_key.like("%/audio-16k.wav"))
     else:
-        for o in objs:
-            if not o.object_key.endswith("/audio-16k.wav"):
-                bucket, object_key = o.bucket, o.object_key
-                break
+        q = q.filter(~UploadObject.object_key.like("%/audio-16k.wav"))
+    obj = q.order_by(UploadObject.id.desc()).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail=f"{kind} not available")
 
-    if not bucket or not object_key:
-        raise HTTPException(status_code=404, detail="Object not found")
-
-    if not minio_enabled():
-        raise HTTPException(status_code=400, detail="MinIO disabled")
-
+    # 4) presign with optional filename
     client = get_minio_client()
-
     headers = None
     if filename:
         headers = {"response-content-disposition": f'attachment; filename="{filename}"'}
 
-    from datetime import timedelta
+    expires = timedelta(seconds=int(ttl))
     url = client.presigned_get_object(
-        bucket,
-        object_key,
-        expires=timedelta(seconds=int(ttl)),
+        obj.bucket,
+        obj.object_key,
+        expires=expires,
         response_headers=headers,
     )
-
-    expires_at = _iso(_now_utc() + timedelta(seconds=int(ttl)))
-    return {"url": url, "expires_at": expires_at}
-    kind = kind.lower().strip()
-    if kind not in {"original", "audio16k"}:
-        raise HTTPException(status_code=422, detail="kind must be 'original' or 'audio16k'")
-
-    obj = _pick_upload_object(db, upload_id, kind)
-    if not obj:
-        raise HTTPException(status_code=404, detail=f"No object for kind '{kind}'")
-
-    try:
-        client = get_minio_client()
-        expires = timedelta(hours=1)
-        # MinIO Python client
-        url = client.presigned_get_object(obj.bucket, obj.object_key, expires=expires)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"presign error: {e}")
 
     return PresignedURLResp(url=url, expires_at=_iso(_now_utc() + expires))
 
