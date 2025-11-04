@@ -12,3 +12,7 @@ node_modules/
 .vscode/
 dev.db
 .env
+
+# frontend
+web/node_modules/
+web/dist/
