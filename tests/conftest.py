@@ -22,6 +22,13 @@ os.environ.setdefault("GPT_ENABLE", "0")            # don't call GPT
 os.environ.setdefault("NOTABLY_ADMIN_TOKEN", "test-admin")
 # Intentionally DO NOT set NOTABLY_API_KEY (keeps auth-lite off)
 
+# --- DB schema init (runs once per test session) ---
+@pytest.fixture(scope="session", autouse=True)
+def _init_db_schema():
+    from backend.app.db import engine
+    from backend.app.models import Base
+    Base.metadata.create_all(bind=engine)
+
 from backend.app.main import app  # noqa: E402
 
 
@@ -44,8 +51,7 @@ def _wav_sine_1s(f_hz=1000, rate=44100, amp=0.25):
     with contextlib.closing(wave.open(buf, "wb")) as w:
         w.setnchannels(1)
         w.setsampwidth(2)  # 16-bit
-        w.setframerate(rate
-        )
+        w.setframerate(rate)
         w.writeframes(b"".join(frames))
     return buf.getvalue()
 
