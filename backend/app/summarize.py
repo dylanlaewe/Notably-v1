@@ -1,216 +1,225 @@
-# backend/app/summarize.py
 from __future__ import annotations
-import os, json, time
-from typing import List, Dict, Optional
+
+import os
+import json
+from typing import Optional, List, Dict, Any, Tuple
+
 from sqlalchemy.orm import Session
 
 from .models import (
-    Transcript,
-    TranscriptSegment,
     Summary,
     SummaryBullet as ORMSummaryBullet,
     BulletCitation as ORMBulletCitation,
+    Transcript,
+    TranscriptSegment,
 )
 
-# Optional OpenAI import; everything is gated so the app still runs without it
+# OpenAI SDK (pip install --upgrade openai>=1.0.0)
 try:
-    from openai import OpenAI  # pip install "openai>=1.52.0"
+    from openai import OpenAI  # type: ignore
 except Exception:
     OpenAI = None  # type: ignore
 
 
 # ---------------------------
-# Helpers / env knobs
+# Logging (tee to same file as tasks.py)
+# ---------------------------
+_LOG_PATH = os.getenv("NOTABLY_LOG_FILE", "/tmp/notably_worker.log")
+_LOG_FH = None
+try:
+    _LOG_FH = open(_LOG_PATH, "a", buffering=1, encoding="utf-8")
+except Exception:
+    _LOG_FH = None
+
+def _log(msg: str) -> None:
+    line = f"[summarize] {msg}"
+    print(line, flush=True)
+    if _LOG_FH:
+        try:
+            _LOG_FH.write(line + "\n")
+        except Exception:
+            pass
+
+
+# ---------------------------
+# Helpers
 # ---------------------------
 def _env_true(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).lower() in {"1", "true", "yes", "y"}
 
-def _int_env(name: str, default: int) -> int:
+
+def _gpt_json(client: Any, model: str, system: str, user: str) -> Dict[str, Any]:
+    """
+    Call GPT and request strict JSON. Returns parsed dict (empty dict on failure).
+    """
     try:
-        return int(os.getenv(name, str(default)))
-    except Exception:
-        return default
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-def gpt_enabled() -> bool:
-    return _env_true("GPT_ENABLE", "false")
-
-def _model_name() -> str:
-    return os.getenv("GPT_MODEL", "gpt-4o-mini")
-
-def _get_client():
-    if OpenAI is None:
-        return None
-    if not os.getenv("OPENAI_API_KEY"):
-        return None
-    return OpenAI()
+        # chat.completions API (OpenAI >=1.0)
+        resp = client.chat.completions.create(  # type: ignore
+            model=model,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.2,
+        )
+        content = resp.choices[0].message.content  # type: ignore
+        return json.loads(content or "{}")
+    except Exception as e:
+        _log(f"GPT call failed ({e})")
+        return {}
 
 
-# ---------------------------
-# Data shaping
-# ---------------------------
-def _segments_payload(db: Session, transcript: Transcript) -> List[Dict]:
-    segs = (
+def _build_segment_index(db: Session, transcript_id: str, max_segments: int = 200) -> Tuple[List[Dict[str, Any]], Dict[int, int]]:
+    """
+    Return:
+      - a list of segment dicts for prompting: [{'i':1,'t_start':..,'t_end':..,'text':..}, ...]
+      - a mapping i -> segment_id for attaching citations
+    Caps to the first 'max_segments' to keep prompt bounded.
+    """
+    segs: List[TranscriptSegment] = (
         db.query(TranscriptSegment)
-        .filter(TranscriptSegment.transcript_id == transcript.id)
+        .filter(TranscriptSegment.transcript_id == transcript_id)
         .order_by(TranscriptSegment.id.asc())
+        .limit(max_segments)
         .all()
     )
-    max_segs = _int_env("SUMMARY_MAX_SEGS", 40)
-    out: List[Dict] = []
-    for s in segs[:max_segs]:
-        out.append(
-            {
-                "id": int(s.id),
-                "t_start": float(s.t_start or 0.0),
-                "t_end": float(s.t_end or 0.0),
-                "text": s.text or "",
-            }
-        )
-    return out
+    prompt_segs: List[Dict[str, Any]] = []
+    i2segid: Dict[int, int] = {}
+    for i, s in enumerate(segs, start=1):
+        prompt_segs.append({
+            "i": i,
+            "t_start": float(s.t_start or 0.0),
+            "t_end": float(s.t_end or 0.0),
+            "text": s.text or "",
+        })
+        i2segid[i] = s.id
+    return prompt_segs, i2segid
 
 
 # ---------------------------
-# OpenAI call (retry + timeout + eval logging)
-# ---------------------------
-def _call_openai_for_bullets(segments: List[Dict]) -> Dict:
-    """
-    Robust wrapper for the OpenAI chat call.
-    Returns strict JSON:
-      {"bullets":[{"text":str,"citations":[{"segment_id":int}]}],
-       "action_items":[{"text":str,"citations":[{"segment_id":int}]}]}
-    """
-    client = _get_client()
-    if client is None:
-        raise RuntimeError("OpenAI client not available")
-
-    # Tunables
-    max_retries = _int_env("GPT_MAX_RETRY", 2)
-    req_timeout = _int_env("GPT_REQUEST_TIMEOUT_SECONDS", 15)  # seconds
-    max_tokens  = _int_env("GPT_MAX_TOKENS", 500)
-    eval_mode   = _env_true("EVAL_MODE", "false")
-
-    sys = (
-        "You produce concise meeting bullets with citations to transcript segment IDs. "
-        "Output ONLY JSON with keys `bullets` and `action_items`. "
-        "Each citation must be an object {{\"segment_id\": <int>}} referencing a provided segment id. "
-        "No prose outside JSON."
-    )
-    usr = json.dumps({"segments": segments}, ensure_ascii=False)
-
-    last_err: Optional[Exception] = None
-    t0 = _now_ms()
-    for attempt in range(max_retries + 1):
-        try:
-            resp = client.chat.completions.create(
-                model=_model_name(),
-                messages=[
-                    {"role": "system", "content": sys},
-                    {"role": "user", "content": usr},
-                ],
-                temperature=0,
-                max_tokens=max_tokens,
-                timeout=req_timeout,  # supported by openai>=1.0 client
-            )
-            latency_ms = _now_ms() - t0
-
-            content = resp.choices[0].message.content or "{}"
-            try:
-                data = json.loads(content)
-            except Exception:
-                # permissive recovery: take the largest JSON-looking block
-                start = content.find("{")
-                end = content.rfind("}")
-                if start >= 0 and end > start:
-                    data = json.loads(content[start : end + 1])
-                else:
-                    raise
-
-            if eval_mode:
-                usage = getattr(resp, "usage", None) or {}
-                eval_blob = {
-                    "evt": "gpt_summary",
-                    "model": _model_name(),
-                    "attempt": attempt,
-                    "latency_ms": latency_ms,
-                    "segments_in": len(segments),
-                    "prompt_tokens": getattr(usage, "prompt_tokens", None)
-                        if hasattr(usage, "prompt_tokens") else (usage.get("prompt_tokens") if isinstance(usage, dict) else None),
-                    "completion_tokens": getattr(usage, "completion_tokens", None)
-                        if hasattr(usage, "completion_tokens") else (usage.get("completion_tokens") if isinstance(usage, dict) else None),
-                    "total_tokens": getattr(usage, "total_tokens", None)
-                        if hasattr(usage, "total_tokens") else (usage.get("total_tokens") if isinstance(usage, dict) else None),
-                }
-                print("[EVAL]", json.dumps(eval_blob), flush=True)
-            return data
-        except Exception as e:
-            last_err = e
-            if attempt < max_retries:
-                time.sleep(0.5 * (attempt + 1))
-            else:
-                break
-
-    # Exhausted retries
-    assert last_err is not None
-    raise last_err
-
-
-# ---------------------------
-# Public entrypoint
+# Main API
 # ---------------------------
 def maybe_generate_summary(db: Session, meeting_id: str, transcript: Transcript) -> bool:
     """
-    If GPT is enabled (env + key) and segments exist, write a Summary with
-    bullets + citations. Returns True if written, else False.
+    Generate a summary with citations if OPENAI_API_KEY is present.
+    Writes:
+      - Summary(meeting_id=..)
+      - SummaryBullet rows
+      - BulletCitation rows (>=1 per bullet, enforced)
+    Returns True iff rows were written.
     """
-    if not gpt_enabled():
-        print("[GPT] disabled; skipping", flush=True)
-        return False
-    if _get_client() is None:
-        print("[GPT] client missing (package or key); skipping", flush=True)
-        return False
-
-    segments = _segments_payload(db, transcript)
-    if not segments:
-        print("[GPT] no segments available; skipping", flush=True)
-        return False
-
     try:
-        valid_ids = {int(s["id"]) for s in segments}
-        data = _call_openai_for_bullets(segments)
-        bullets = list(data.get("bullets", []))
-        actions = list(data.get("action_items", []))
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or OpenAI is None:
+            _log("OpenAI not available; skipping summarize")
+            return False
 
+        model = os.getenv("SUMMARY_MODEL", "gpt-4o-mini")
+
+        # Gather segments (bounded)
+        prompt_segs, i2segid = _build_segment_index(db, transcript.id, max_segments=int(os.getenv("SUMMARY_MAX_SEGMENTS", "200")))
+        if not prompt_segs:
+            _log("no segments to summarize; skipping")
+            return False
+
+        # Build prompt
+        system = (
+            "You are a careful meeting summarizer. "
+            "Output STRICT JSON with two arrays: 'bullets' and 'actions'. "
+            "Each item must include a 'text' string and a 'citations' array of segment indices. "
+            "Every bullet MUST cite at least one segment index."
+        )
+        user = json.dumps({
+            "instructions": {
+                "style": "concise bullets for an executive reader",
+                "max_bullets": 5,
+                "max_actions": 3,
+                "must_cite": True
+            },
+            "segments": prompt_segs
+        })
+
+        client = OpenAI(api_key=api_key)  # type: ignore
+        _log(f"Calling {model} for summary over {len(prompt_segs)} segments")
+        out = _gpt_json(client, model, system, user) or {}
+
+        bullets = out.get("bullets") or []
+        actions = out.get("actions") or []
+
+        # Sanity: ensure lists
+        if not isinstance(bullets, list): bullets = []
+        if not isinstance(actions, list): actions = []
+
+        if not bullets and not actions:
+            _log("model returned no bullets/actions; skipping")
+            return False
+
+        # Create Summary
         summary = Summary(meeting_id=meeting_id)
-        db.add(summary)
-        db.flush()
+        db.add(summary); db.flush()
 
-        def _write_one(bobj: Dict):
-            text = str(bobj.get("text", "")).strip()
-            if not text:
-                return
-            row = ORMSummaryBullet(summary_id=summary.id, text=text)
-            db.add(row)
-            db.flush()
-            for c in bobj.get("citations", []):
+        def _normalize_items(items: List[Dict[str, Any]], is_action: bool) -> List[Tuple[str, List[int]]]:
+            normalized: List[Tuple[str, List[int]]] = []
+            for it in items:
                 try:
-                    sid = int(c.get("segment_id"))
-                except Exception:
-                    continue
-                if sid in valid_ids:
-                    db.add(ORMBulletCitation(summary_bullet_id=row.id, segment_id=sid))
+                    text = (it.get("text") or "").strip()
+                    cites_raw = it.get("citations") or []
+                    if not isinstance(cites_raw, list):
+                        cites_raw = []
+                    cites = []
+                    for c in cites_raw:
+                        try:
+                            iv = int(c)
+                            if iv >= 1:
+                                cites.append(iv)
+                        except Exception:
+                            continue
+                    if not text:
+                        continue
+                    if is_action:
+                        text = f"Action: {text}"
+                    normalized.append((text, cites))
+                except Exception as e:
+                    _log(f"skip malformed item ({e})")
+            return normalized
 
-        for b in bullets:
-            _write_one(b)
-        for a in actions:
-            _write_one(a)
+        norm_bullets = _normalize_items(bullets, is_action=False)
+        norm_actions = _normalize_items(actions, is_action=True)
+        wrote = False
+
+        def _attach_bullet(text: str, cite_indices: List[int]) -> None:
+            nonlocal wrote
+            b = ORMSummaryBullet(summary_id=summary.id, text=text)
+            db.add(b); db.flush()
+            # enforce >=1 citation
+            attached = 0
+            for idx in cite_indices:
+                seg_id = i2segid.get(idx)
+                if seg_id:
+                    db.add(ORMBulletCitation(summary_bullet_id=b.id, segment_id=seg_id))
+                    attached += 1
+            if attached == 0:
+                # fallback: cite the first available segment
+                first_idx = 1 if 1 in i2segid else (min(i2segid.keys()) if i2segid else None)
+                if first_idx is not None:
+                    db.add(ORMBulletCitation(summary_bullet_id=b.id, segment_id=i2segid[first_idx]))
+                    attached = 1
+            wrote = True
+
+        for text, cites in norm_bullets:
+            _attach_bullet(text, cites)
+        for text, cites in norm_actions:
+            _attach_bullet(text, cites)
 
         db.commit()
-        print(f"[GPT] wrote summary: {len(bullets)} bullets, {len(actions)} action_items", flush=True)
-        return True
+        _log(f"Summary written meeting_id={meeting_id} bullets={len(norm_bullets)} actions={len(norm_actions)}")
+        return wrote
+
     except Exception as e:
-        db.rollback()
-        print(f"[GPT] error ({e}); skipping", flush=True)
+        _log(f"summarize failed ({e})")
+        try:
+            db.rollback()
+        except Exception:
+            pass
         return False
