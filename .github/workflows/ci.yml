@@ -52,6 +52,20 @@ jobs:
             pg_isready -h localhost -p 5432 -U notably && break
             sleep 1
           done
+      
+      - name: Initialize DB schema
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from backend.app.db import engine
+          from backend.app.models import Base
+          Base.metadata.create_all(bind=engine)
+          print("DB schema initialized")
+          PY
+
 
       - name: Run tests
         env:
