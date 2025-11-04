@@ -437,7 +437,7 @@ async def list_uploads(
         for u in rows
     ]
 
-@router.get("/search", response_model=List[SearchHit])
+@router.get("/segments/search", response_model=List[SearchHit])
 async def search_segments(
     q: str,
     meeting_id: Optional[str] = None,
