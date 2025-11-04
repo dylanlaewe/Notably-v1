@@ -11,6 +11,7 @@ from .api.v1.health import router as health_router
 from .api.v1.actions import router as actions_router
 from .security import ApiKeyAuthMiddleware, RateLimitMiddleware
 from .api.v1.search import router as search_router
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI(title="Notably API", version="0.0.3")
@@ -18,6 +19,13 @@ app = FastAPI(title="Notably API", version="0.0.3")
 
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ApiKeyAuthMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
