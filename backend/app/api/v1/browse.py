@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
+import re
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func, case, desc
 
 from ...db import SessionLocal
 from ...models import (
@@ -15,12 +18,10 @@ from ...models import (
     BulletCitation,
 )
 
-import os
-
 router = APIRouter(prefix="/v1", tags=["browse", "search"])
 
 # ---------------------------
-# Logging (tee to the same worker log, harmless in API)
+# Logging
 # ---------------------------
 _LOG_PATH = os.getenv("NOTABLY_LOG_FILE", "/tmp/notably_worker.log")
 _LOG_FH = None
@@ -51,7 +52,6 @@ def _format_time_s(s: float | int | None) -> str:
 # Helpers
 # ---------------------------
 def _get_latest_transcript_for_meeting(db: Session, meeting_id: str) -> Optional[Transcript]:
-    # Transcript -> Upload (meeting_id)
     return (
         db.query(Transcript)
         .join(Upload, Upload.id == Transcript.upload_id)
@@ -79,10 +79,6 @@ def get_transcript(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    """
-    Return transcript segments for the latest transcript tied to this meeting_id.
-    Paginated via limit/offset. Ordered by segment id ascending.
-    """
     db = SessionLocal()
     try:
         t = _get_latest_transcript_for_meeting(db, meeting_id)
@@ -108,26 +104,20 @@ def get_transcript(
             }
             for s in segs
         ]
-        return JSONResponse(
-            {
-                "meeting_id": meeting_id,
-                "transcript_id": str(t.id),
-                "total": total,
-                "limit": limit,
-                "offset": offset,
-                "items": items,
-            }
-        )
+        return {
+            "meeting_id": meeting_id,
+            "transcript_id": str(t.id),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "items": items,
+        }
     finally:
         db.close()
 
 
 @router.get("/meetings/{meeting_id}/summary", response_class=JSONResponse)
 def get_summary(meeting_id: str):
-    """
-    Return the latest summary for meeting_id with bullets and their citations,
-    joined to segment timestamps (if available).
-    """
     db = SessionLocal()
     try:
         s = _get_latest_summary_for_meeting(db, meeting_id)
@@ -136,12 +126,11 @@ def get_summary(meeting_id: str):
 
         bullets: List[SummaryBullet] = (
             db.query(SummaryBullet)
-            .filter(SummaryBullet.summary_id == str(s.id))  # summary_bullet.summary_id may be varchar
+            .filter(SummaryBullet.summary_id == str(s.id))
             .order_by(SummaryBullet.id.asc())
             .all()
         )
 
-        # Fetch citations and associated segment times
         bullet_dicts: List[Dict[str, Any]] = []
         for b in bullets:
             cites = (
@@ -169,14 +158,12 @@ def get_summary(meeting_id: str):
                 }
             )
 
-        return JSONResponse(
-            {
-                "meeting_id": meeting_id,
-                "summary_id": str(s.id),
-                "bullets": bullet_dicts,
-                "bullet_count": len(bullet_dicts),
-            }
-        )
+        return {
+            "meeting_id": meeting_id,
+            "summary_id": str(s.id),
+            "bullets": bullet_dicts,
+            "bullet_count": len(bullet_dicts),
+        }
     finally:
         db.close()
 
@@ -186,16 +173,39 @@ def search(
     q: str = Query(..., min_length=1, description="Search string"),
     meeting_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
+    mode: str = Query("and", description="Match mode: 'and' or 'or'"),
 ):
     """
-    Lightweight search over transcript segments and summary bullets (ILIKE).
-    Optional filter to a specific meeting_id.
+    Tokenized search across transcript segments and summary bullets.
+    - Splits q into tokens (alnum); default AND semantics across tokens.
+    - Optional `mode=or` for OR semantics.
+    - Ranks results by simple term-hit score (more hits first).
     """
     db = SessionLocal()
     try:
-        q_like = f"%{q}%"
+        # Tokenize (keep alphanumeric; case-insensitive)
+        tokens = re.findall(r"[A-Za-z0-9]+", q.lower())
+        tokens = [t for t in tokens if t]
+        if not tokens:
+            return {"q": q, "meeting_id": meeting_id, "limit": limit, "mode": mode, "results": []}
+
+        # Build AND/OR condition builders
+        def _build_text_cond(column):
+            conds = [column.ilike(f"%{t}%") for t in tokens]
+            return and_(*conds) if mode.lower() == "and" else or_(*conds)
+
+        def _build_score(column):
+            # Sum(# of tokens that match) for simple ranking
+            parts = [case((column.ilike(f"%{t}%"), 1), else_=0) for t in tokens]
+            # SQLAlchemy sums python-side; use func.sum over literal? summing expressions is fine.
+            s = parts[0]
+            for p in parts[1:]:
+                s = s + p
+            return s.label("score")
 
         # SEGMENTS
+        seg_cond = _build_text_cond(TranscriptSegment.text)
+        seg_score = _build_score(TranscriptSegment.text)
         seg_query = (
             db.query(
                 Upload.meeting_id,
@@ -203,15 +213,20 @@ def search(
                 TranscriptSegment.t_start,
                 TranscriptSegment.t_end,
                 TranscriptSegment.text,
+                seg_score,
             )
             .join(Transcript, Transcript.id == TranscriptSegment.transcript_id)
             .join(Upload, Upload.id == Transcript.upload_id)
-            .filter(TranscriptSegment.text.ilike(q_like))
+            .filter(seg_cond)
         )
         if meeting_id:
             seg_query = seg_query.filter(Upload.meeting_id == meeting_id)
-        segs = seg_query.order_by(TranscriptSegment.id.asc()).limit(limit).all()
-
+        seg_rows = (
+            seg_query
+            .order_by(desc("score"), TranscriptSegment.id.asc())
+            .limit(limit)
+            .all()
+        )
         seg_items = [
             {
                 "kind": "segment",
@@ -222,36 +237,49 @@ def search(
                 "t_start_str": _format_time_s(t0),
                 "t_end_str": _format_time_s(t1),
                 "snippet": (text or "")[:300],
+                "score": int(score or 0),
             }
-            for (m_id, seg_id, t0, t1, text) in segs
+            for (m_id, seg_id, t0, t1, text, score) in seg_rows
         ]
 
         # BULLETS
+        bul_cond = _build_text_cond(SummaryBullet.text)
+        bul_score = _build_score(SummaryBullet.text)
         bul_query = (
             db.query(
                 Summary.meeting_id,
                 SummaryBullet.id.label("bullet_id"),
                 SummaryBullet.text,
+                bul_score,
             )
-            .join(Summary, Summary.id == SummaryBullet.summary_id)  # summary_id may be string; SQLA handles
-            .filter(SummaryBullet.text.ilike(q_like))
+            .join(Summary, Summary.id == SummaryBullet.summary_id)
+            .filter(bul_cond)
         )
         if meeting_id:
             bul_query = bul_query.filter(Summary.meeting_id == meeting_id)
-        buls = bul_query.order_by(SummaryBullet.id.asc()).limit(limit).all()
-
+        bul_rows = (
+            bul_query
+            .order_by(desc("score"), SummaryBullet.id.asc())
+            .limit(limit)
+            .all()
+        )
         bul_items = [
             {
                 "kind": "bullet",
                 "meeting_id": m_id,
                 "bullet_id": b_id,
                 "text": (text or "")[:300],
+                "score": int(score or 0),
             }
-            for (m_id, b_id, text) in buls
+            for (m_id, b_id, text, score) in bul_rows
         ]
 
-        # Combine with simple cap
-        combined = (seg_items + bul_items)[:limit]
-        return JSONResponse({"q": q, "meeting_id": meeting_id, "limit": limit, "results": combined})
+        # Merge + rank in Python (keeps types simple); cap to limit
+        combined = seg_items + bul_items
+        combined.sort(key=lambda x: x.get("score", 0), reverse=True)
+        combined = combined[:limit]
+
+        _log(f"search q={q!r} tokens={tokens} mode={mode} results={len(combined)}")
+        return {"q": q, "meeting_id": meeting_id, "limit": limit, "mode": mode, "results": combined}
     finally:
         db.close()
