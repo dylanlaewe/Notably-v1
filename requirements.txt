@@ -21,3 +21,5 @@ psycopg[binary]
 rq
 redis
 openai>=1.52.0
+reportlab>=4.0.0
+openai>=1.0.0
