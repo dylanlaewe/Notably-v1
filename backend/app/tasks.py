@@ -5,7 +5,9 @@ import json
 import subprocess
 import tempfile
 import os
+import sys
 import hashlib
+import shutil
 from io import BytesIO
 
 # MinIO client (support old name get_client)
@@ -28,6 +30,27 @@ from .stubs import _make_stub_result
 from .transcribe import maybe_transcribe_from_minio
 from .summarize import maybe_generate_summary
 
+
+# ---------------------------
+# Logging (tee to file + stdout)
+# ---------------------------
+_LOG_PATH = os.getenv("NOTABLY_LOG_FILE", "/tmp/notably_worker.log")
+_LOG_FH = None
+try:
+    _LOG_FH = open(_LOG_PATH, "a", buffering=1, encoding="utf-8")  # line-buffered
+except Exception:
+    _LOG_FH = None
+
+def _log(msg: str) -> None:
+    line = f"[tasks] {msg}"
+    # console
+    print(line, flush=True)
+    # file
+    if _LOG_FH:
+        try:
+            _LOG_FH.write(line + "\n")
+        except Exception:
+            pass
 
 
 # ---------------------------
@@ -74,6 +97,14 @@ def _sha256_bytes(b: bytes) -> str:
     return h.hexdigest()
 
 
+def _sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 # ---------------------------
 # Task
 # ---------------------------
@@ -81,12 +112,12 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
     """
     Background job:
       - status: queued -> processing -> done
-      - If MINIO_ENABLE: probe duration, write audio-16k.wav
-      - If WHISPER_ENABLE (+ key): transcribe via Whisper
-      - Always write a Summary (stub bullets; cite available segments)
+      - If MINIO_ENABLE: probe duration, write audio-16k.wav (best-effort, with guards)
+      - If WHISPER_ENABLE (+ key): transcribe via Whisper (best-effort)
+      - Always write a Summary (real via GPT if possible; else stub bullets with citations)
     """
     db = SessionLocal()
-    u = None
+    u: Upload | None = None
     try:
         # mark processing
         u = db.get(Upload, upload_id)
@@ -119,61 +150,89 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                         suffix=os.path.splitext(obj.object_key)[1] or ".bin"
                     )
                     os.close(fd)
+                    wav_fd, wav_path = tempfile.mkstemp(suffix=".wav")
+                    os.close(wav_fd)
+
                     try:
+                        _log(f"[MINIO] fget_object bucket={obj.bucket} key={obj.object_key}")
                         client.fget_object(obj.bucket, obj.object_key, tmp_path)
 
-                        # duration (non-fatal)
-                        print(f"[PROBE] ffprobe {tmp_path}", flush=True)
+                        # integrity check vs DB (size + sha256 when available)
+                        try:
+                            size = os.path.getsize(tmp_path)
+                            sha_local = _sha256_file(tmp_path)
+                            _log(f"[DL] size={size} (db={obj.byte_size}) sha256={sha_local[:12]}.. (db={str(obj.sha256)[:12]}..)")
+                            mismatch = False
+                            if obj.byte_size and size != obj.byte_size:
+                                mismatch = True
+                            if obj.sha256 and sha_local and obj.sha256 != sha_local:
+                                mismatch = True
+                            if mismatch:
+                                _log("[DL] mismatch detected; retrying download once")
+                                retry_path = tmp_path + ".retry"
+                                client.fget_object(obj.bucket, obj.object_key, retry_path)
+                                # atomically swap in retried file
+                                shutil.move(retry_path, tmp_path)
+                                size = os.path.getsize(tmp_path)
+                                sha_local = _sha256_file(tmp_path)
+                                _log(f"[DL] after-retry size={size} sha256={sha_local[:12]}..")
+                        except Exception as e:
+                            _log(f"[DL] integrity check skipped ({e})")
+
+                        # duration (non-fatal; gate for ffmpeg)
+                        _log(f"[PROBE] ffprobe {tmp_path}")
                         dur = _probe_duration_sec(tmp_path)
-                        if dur is not None:
+                        if dur is not None and dur > 0:
                             u.duration_sec = float(dur)
                             db.add(u)
                             db.commit()
-                            print(f"[PROBE] duration={u.duration_sec:.3f}s", flush=True)
+                            _log(f"[PROBE] duration={u.duration_sec:.3f}s")
+                        else:
+                            _log("[PROBE] failed or zero duration; skipping ffmpeg")
 
                         # transcode -> 16kHz mono WAV (non-fatal)
-                        wav_fd, wav_path = tempfile.mkstemp(suffix=".wav")
-                        os.close(wav_fd)
-                        try:
-                            print(f"[FFMPEG] -> {wav_path}", flush=True)
-                            _ffmpeg_to_wav(tmp_path, wav_path)
-                            with open(wav_path, "rb") as f:
-                                data = f.read()
-                            if data:
-                                wav_key = obj.object_key.rsplit("/", 1)[0] + "/audio-16k.wav"
-                                print(f"[AUDIO16K] uploading {wav_key} (bytes={len(data)})", flush=True)
-                                client.put_object(
-                                    obj.bucket,
-                                    wav_key,
-                                    data=BytesIO(data),
-                                    length=len(data),
-                                    content_type="audio/wav",
-                                )
-                                db.add(
-                                    UploadObject(
-                                        upload_id=upload_id,
-                                        bucket=obj.bucket,
-                                        object_key=wav_key,
-                                        content_type="audio/wav",
-                                        byte_size=len(data),
-                                        sha256=_sha256_bytes(data),
-                                    )
-                                )
-                                db.commit()
-                        except Exception as e:
-                            print(f"[FFMPEG] skip ({e})", flush=True)
-                        finally:
+                        if dur is not None and dur > 0:
                             try:
-                                os.remove(wav_path)
-                            except Exception:
-                                pass
+                                _log(f"[FFMPEG] -> {wav_path}")
+                                _ffmpeg_to_wav(tmp_path, wav_path)
+                                with open(wav_path, "rb") as f:
+                                    data = f.read()
+
+                                if data:
+                                    wav_key = obj.object_key.rsplit("/", 1)[0] + "/audio-16k.wav"
+                                    _log(f"[AUDIO16K] uploading {wav_key} (bytes={len(data)})")
+                                    client.put_object(
+                                        obj.bucket,
+                                        wav_key,
+                                        data=BytesIO(data),
+                                        length=len(data),
+                                        content_type="audio/wav",
+                                    )
+                                    db.add(
+                                        UploadObject(
+                                            upload_id=upload_id,
+                                            bucket=obj.bucket,
+                                            object_key=wav_key,
+                                            content_type="audio/wav",
+                                            byte_size=len(data),
+                                            sha256=_sha256_bytes(data),
+                                        )
+                                    )
+                                    db.commit()
+                            except Exception as e:
+                                _log(f"[FFMPEG] skip ({e})")
                     finally:
+                        # cleanup temp files
                         try:
                             os.remove(tmp_path)
                         except Exception:
                             pass
+                        try:
+                            os.remove(wav_path)
+                        except Exception:
+                            pass
         except Exception as e:
-            print(f"[MINIO] skip ({e})", flush=True)
+            _log(f"[MINIO] skip ({e})")
 
         # --- Optional: Whisper transcription (writes Transcript+Segments on success) ---
         wrote = False
@@ -181,7 +240,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
             if obj is not None:  # only attempt if we had an object
                 wrote = maybe_transcribe_from_minio(db, u, obj)
         except Exception as e:
-            print(f"[WHISPER] skip ({e})", flush=True)
+            _log(f"[WHISPER] skip ({e})")
             wrote = False
 
         # --- If Whisper didn't write a transcript, fabricate stub transcript ---
@@ -214,7 +273,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                 .order_by(Transcript.id.desc())
                 .first()
             )
-            # Build a minimal index over the first two segments so our stub bullets can cite something real
+            # Build an index so stub bullets (or GPT bullets) can cite something real
             if t:
                 segs = (
                     db.query(TranscriptSegment)
@@ -228,7 +287,11 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
         # --- Try GPT summary; fall back to simple stub summary with citations ---
         wrote_summary = False
         if t is not None:
-            wrote_summary = maybe_generate_summary(db, meeting_id, t)
+            try:
+                wrote_summary = maybe_generate_summary(db, meeting_id, t)
+            except Exception as e:
+                _log(f"[SUMMARY] GPT path skipped ({e})")
+                wrote_summary = False
 
         if not wrote_summary:
             summary = Summary(meeting_id=meeting_id)
@@ -245,22 +308,6 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                 db.add(ORMBulletCitation(summary_bullet_id=b2.id, segment_id=seg_id_by_index[2]))
 
             db.commit()
-
-
-        # Two generic bullets that cite segment 1 and 2 when available
-        b1_text = "Transcript captured."
-        b2_text = "Upload pipeline OK; next: summarize with GPT and cite segments."
-        b1 = ORMSummaryBullet(summary_id=summary.id, text=b1_text)
-        b2 = ORMSummaryBullet(summary_id=summary.id, text=b2_text)
-        db.add(b1); db.flush()
-        db.add(b2); db.flush()
-
-        if 1 in seg_id_by_index:
-            db.add(ORMBulletCitation(summary_bullet_id=b1.id, segment_id=seg_id_by_index[1]))
-        if 2 in seg_id_by_index:
-            db.add(ORMBulletCitation(summary_bullet_id=b2.id, segment_id=seg_id_by_index[2]))
-
-        db.commit()
 
         # done
         u.status = "done"
