@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: notably
+          POSTGRES_PASSWORD: notably
+          POSTGRES_DB: notably_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U notably"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://notably:notably@localhost:5432/notably_test
+      MINIO_ENABLE: "0"
+      RQ_ENABLE: "0"
+      WHISPER_ENABLE: "0"
+      GPT_ENABLE: "0"
+      NOTABLY_ADMIN_TOKEN: "ci-admin"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..20}; do
+            pg_isready -h localhost -p 5432 -U notably && break
+            sleep 1
+          done
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q
