@@ -167,7 +167,7 @@ def get_summary(meeting_id: str):
     finally:
         db.close()
 
-
+'''
 @router.get("/search", response_class=JSONResponse)
 def search(
     q: str = Query(..., min_length=1, description="Search string"),
@@ -283,3 +283,4 @@ def search(
         return {"q": q, "meeting_id": meeting_id, "limit": limit, "mode": mode, "results": combined}
     finally:
         db.close()
+'''
