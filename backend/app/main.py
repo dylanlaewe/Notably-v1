@@ -10,10 +10,15 @@ from .api.v1.admin import router as admin_router
 from .api.v1.health import router as health_router
 from .api.v1.actions import router as actions_router
 from .api.v1.search import router as search_router
-
+from .security import ApiKeyAuthMiddleware, RateLimitMiddleware
 
 
 app = FastAPI(title="Notably API", version="0.0.3")
+
+
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(ApiKeyAuthMiddleware)
+
 
 @app.get("/health")
 def health():
@@ -22,6 +27,7 @@ def health():
 @app.get("/auth/ping")
 def auth_ping():
     return {"ok": True}
+
 
 app.include_router(uploads_router, prefix="/v1", tags=["uploads"])
 app.include_router(browse_router)
