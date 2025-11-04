@@ -8,6 +8,8 @@ from .api.v1.meetings import router as meetings_router
 from .api.v1.tags import router as tags_router
 from .api.v1.admin import router as admin_router
 from .api.v1.health import router as health_router
+from .api.v1.actions import router as actions_router
+
 
 
 app = FastAPI(title="Notably API", version="0.0.3")
@@ -27,3 +29,4 @@ app.include_router(meetings_router)
 app.include_router(tags_router)
 app.include_router(admin_router)
 app.include_router(health_router)
+app.include_router(actions_router)
