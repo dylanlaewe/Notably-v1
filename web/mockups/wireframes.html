@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notably Wireframes</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .wireframe {
+            background: white;
+            border: 2px solid #333;
+            margin: 20px 0;
+            padding: 20px;
+            position: relative;
+        }
+        .wireframe-title {
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            position: absolute;
+            top: -15px;
+            left: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .box {
+            border: 1px solid #999;
+            padding: 10px;
+            margin: 10px 0;
+            background: #fafafa;
+        }
+        .header-box {
+            height: 60px;
+            background: repeating-linear-gradient(45deg, #e0e0e0, #e0e0e0 10px, #f0f0f0 10px, #f0f0f0 20px);
+        }
+        .content-box {
+            height: 200px;
+            background: repeating-linear-gradient(45deg, #f8f8f8, #f8f8f8 10px, #ffffff 10px, #ffffff 20px);
+        }
+        .sidebar-box {
+            height: 300px;
+            background: repeating-linear-gradient(45deg, #efefef, #efefef 10px, #f9f9f9 10px, #f9f9f9 20px);
+        }
+        .input-box {
+            height: 30px;
+            background: #fff;
+            border: 1px dashed #ccc;
+        }
+        .button-box {
+            height: 35px;
+            background: #ddd;
+            border: 1px solid #999;
+            text-align: center;
+            line-height: 35px;
+            font-weight: bold;
+        }
+        .grid {
+            display: grid;
+            gap: 20px;
+        }
+        .grid-2 { grid-template-columns: 1fr 1fr; }
+        .grid-3 { grid-template-columns: 2fr 1fr; }
+        .flex {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .annotation {
+            background: #fffbcc;
+            border: 1px solid #e6d700;
+            padding: 5px;
+            margin: 5px 0;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    
+    <!-- Main Layout Wireframe -->
+    <div class="wireframe">
+        <div class="wireframe-title">MAIN LAYOUT</div>
+        
+        <!-- Header -->
+        <div class="box header-box flex">
+            <div style="flex: 1;">
+                <strong>LOGO + TITLE</strong><br>
+                <small>Navigation tabs</small>
+            </div>
+            <div>
+                <div class="button-box" style="width: 80px; height: 25px; line-height: 25px;">Refresh</div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="grid grid-3">
+            <!-- Left Content -->
+            <div>
+                <!-- Config Panel -->
+                <div class="box">
+                    <strong>API Configuration</strong>
+                    <div class="annotation">Collapsible panel for backend settings</div>
+                    <div class="grid grid-2" style="margin-top: 10px;">
+                        <div class="input-box"></div>
+                        <div class="input-box"></div>
+                    </div>
+                    <div class="flex" style="margin-top: 10px;">
+                        <div class="button-box" style="width: 100px;">Test Connection</div>
+                    </div>
+                </div>
+
+                <!-- Upload Section -->
+                <div class="box">
+                    <strong>File Upload</strong>
+                    <div class="annotation">Drag & drop interface with file preview</div>
+                    <div class="flex" style="margin: 10px 0;">
+                        <div class="input-box" style="flex: 2;"></div>
+                        <div class="button-box" style="width: 50px;">🔄</div>
+                    </div>
+                    <div class="box" style="height: 80px; text-align: center; line-height: 80px; border: 2px dashed #ccc;">
+                        DRAG & DROP ZONE
+                    </div>
+                    <div class="button-box" style="margin-top: 10px;">Upload & Process</div>
+                </div>
+
+                <!-- Meeting Viewer -->
+                <div class="box content-box">
+                    <strong>Summary & Transcript</strong>
+                    <div class="annotation">Main content area with tabs or sections</div>
+                    <div style="margin-top: 10px;">
+                        <div style="height: 60px; background: #f0f0f0; margin: 5px 0; padding: 10px;">
+                            • Summary bullet point<br>
+                            • Another key point<br>
+                            • Action items summary
+                        </div>
+                        <div style="height: 100px; background: #f8f8f8; padding: 10px; overflow: hidden;">
+                            [00:15] Transcript text here...<br>
+                            [01:30] More transcript content...<br>
+                            [02:45] Scrollable content area...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar -->
+            <div>
+                <div class="box sidebar-box">
+                    <strong>Action Items</strong>
+                    <div class="annotation">Task management sidebar</div>
+                    
+                    <!-- Add Action Form -->
+                    <div style="margin: 10px 0;">
+                        <div class="input-box"></div>
+                        <div class="flex" style="margin-top: 5px;">
+                            <select style="padding: 5px; flex: 1;">
+                                <option>Priority</option>
+                            </select>
+                            <div class="button-box" style="width: 60px; height: 30px; line-height: 30px;">Add</div>
+                        </div>
+                    </div>
+
+                    <!-- Action Items List -->
+                    <div style="margin-top: 15px;">
+                        <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; background: white;">
+                            ☐ Task 1 [P1]
+                        </div>
+                        <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; background: white;">
+                            ☑ Task 2 [P2]
+                        </div>
+                        <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; background: white;">
+                            ☐ Task 3 [P3]
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="box">
+            <strong>Search Interface</strong>
+            <div class="annotation">Global search with filters</div>
+            <div class="flex" style="margin: 10px 0;">
+                <div class="input-box" style="flex: 1;"></div>
+                <div class="button-box" style="width: 80px;">Search</div>
+            </div>
+            <div class="grid grid-2" style="margin-top: 10px;">
+                <div style="border: 1px solid #ddd; padding: 10px; background: white;">
+                    Search Result 1
+                </div>
+                <div style="border: 1px solid #ddd; padding: 10px; background: white;">
+                    Search Result 2
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Layout Wireframe -->
+    <div class="wireframe">
+        <div class="wireframe-title">MOBILE LAYOUT</div>
+        
+        <div style="max-width: 375px; margin: 0 auto;">
+            <!-- Mobile Header -->
+            <div class="box" style="height: 50px;">
+                <div class="flex">
+                    <div style="flex: 1;"><strong>Notably</strong></div>
+                    <div style="width: 30px; height: 30px; background: #ddd;">☰</div>
+                </div>
+            </div>
+
+            <!-- Mobile Stacked Layout -->
+            <div class="box">
+                <strong>Upload (Collapsed)</strong>
+                <div class="annotation">Collapsible sections on mobile</div>
+                <div style="height: 40px; background: #f0f0f0; margin: 5px 0;"></div>
+            </div>
+
+            <div class="box">
+                <strong>Content (Tabbed)</strong>
+                <div class="annotation">Tab interface for mobile</div>
+                <div class="flex" style="margin: 10px 0;">
+                    <div class="button-box" style="flex: 1; height: 30px; line-height: 30px;">Summary</div>
+                    <div class="button-box" style="flex: 1; height: 30px; line-height: 30px;">Actions</div>
+                    <div class="button-box" style="flex: 1; height: 30px; line-height: 30px;">Search</div>
+                </div>
+                <div style="height: 200px; background: #f8f8f8;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Component Flow -->
+    <div class="wireframe">
+        <div class="wireframe-title">USER FLOW</div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="box" style="width: 120px; height: 80px; text-align: center;">
+                <strong>1. Configure</strong><br>
+                <small>API Settings</small>
+            </div>
+            <div style="font-size: 20px;">→</div>
+            <div class="box" style="width: 120px; height: 80px; text-align: center;">
+                <strong>2. Upload</strong><br>
+                <small>Audio File</small>
+            </div>
+            <div style="font-size: 20px;">→</div>
+            <div class="box" style="width: 120px; height: 80px; text-align: center;">
+                <strong>3. Process</strong><br>
+                <small>Transcribe</small>
+            </div>
+            <div style="font-size: 20px;">→</div>
+            <div class="box" style="width: 120px; height: 80px; text-align: center;">
+                <strong>4. Review</strong><br>
+                <small>Results</small>
+            </div>
+            <div style="font-size: 20px;">→</div>
+            <div class="box" style="width: 120px; height: 80px; text-align: center;">
+                <strong>5. Action</strong><br>
+                <small>Items & Export</small>
+            </div>
+        </div>
+
+        <div class="annotation" style="margin-top: 20px;">
+            <strong>Key Interaction Patterns:</strong><br>
+            • Progressive disclosure (collapsible sections)<br>
+            • Drag & drop for file uploads<br>
+            • Real-time status updates<br>
+            • Keyboard shortcuts for power users<br>
+            • Mobile-first responsive design
+        </div>
+    </div>
+
+</body>
+</html>
