@@ -1,15 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// Minimal single-file React UI to exercise Notably backend
-// - Configure API base + (optional) X-Api-Key
-// - Upload audio to a Meeting (auto UUID or custom)
-// - Poll upload status → fetch Summary, Transcript, Actions
-// - Create/Toggle Actions
-// - Tokenized Search (new /v1/search)
-// - Export MD/PDF (downloads)
-//
-// Drop this into your frontend as e.g. src/NotablyApp.jsx and render <NotablyApp />.
-// Tailwind classes used for quick styling; feel free to adapt.
+// Notably React UI with design matching the reference mockups
+// - Dark theme with #00FF88 accent color
+// - Sidebar navigation
+// - Card-based layout
+// - Upload functionality with visual feedback
+// - Meeting management and transcript viewing
 
 function uuidv4() {
   // Simple uuid v4 for client side meeting IDs
@@ -59,12 +55,15 @@ export default function NotablyApp() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchTotal, setSearchTotal] = useState(0);
 
+  // UI state
+  const [currentView, setCurrentView] = useState('home');
+  const [showSettings, setShowSettings] = useState(false);
+
   const cfg = useMemo(() => ({ baseUrl, apiKey }), [baseUrl, apiKey]);
 
   async function refreshMeetings() {
     try {
       const items = await apiFetch(cfg.baseUrl, '/v1/meetings', { apiKey: cfg.apiKey });
-      // Endpoint returns newest first; normalize to array
       setMeetings(Array.isArray(items) ? items : (items.items || []));
     } catch (e) {
       console.error('list meetings failed', e);
@@ -93,7 +92,6 @@ export default function NotablyApp() {
         if (Date.now() - t0 > 10000) throw new Error('timeout waiting for background job');
         await new Promise(r => setTimeout(r, 300));
       }
-      // auto-select meeting and fetch data
       setSelectedMeeting(meetingId);
       await Promise.all([fetchSummary(meetingId), fetchTranscript(meetingId), fetchActions(meetingId)]);
       await refreshMeetings();
@@ -188,132 +186,363 @@ export default function NotablyApp() {
     }
   }
 
+  function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) {
+      window.location.href = '/login';
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl md:text-3xl font-bold">Notably – Backend Wiring UI</h1>
-          <button className="text-sm px-3 py-1 rounded bg-gray-200 hover:bg-gray-300" onClick={refreshMeetings}>Refresh</button>
-        </header>
+    <div className="min-h-screen bg-black">
+      {/* Top Blue Bar */}
+      <div className="w-full h-2" style={{ backgroundColor: '#0a4a6e' }}></div>
 
-        {/* Config */}
-        <section className="grid md:grid-cols-3 gap-3 bg-white p-4 rounded-2xl shadow">
-          <div className="col-span-2">
-            <label className="block text-sm font-medium">API Base URL</label>
-            <input className="mt-1 w-full border rounded px-3 py-2" value={baseUrl} onChange={e=>setBaseUrl(e.target.value)} placeholder="http://127.0.0.1:8000" />
+      {/* Header */}
+      <header className="flex justify-between items-center px-12 py-8">
+        <div className="flex items-center gap-0">
+          <div className="w-48 h-32">
+            <div className="notably-primary text-6xl font-bold">Notably</div>
+            <div className="text-lg notably-secondary">AI Meeting Intelligence</div>
           </div>
-          <div>
-            <label className="block text-sm font-medium">X-Api-Key (optional)</label>
-            <input className="mt-1 w-full border rounded px-3 py-2" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="dev-api" />
-          </div>
-        </section>
+        </div>
+        <button 
+          onClick={handleLogout}
+          className="notably-button px-9 py-3"
+        >
+          Logout
+        </button>
+      </header>
 
-        {/* Upload */}
-        <section className="bg-white p-4 rounded-2xl shadow space-y-3">
-          <h2 className="text-lg font-semibold">Upload audio → Meeting</h2>
-          <div className="grid md:grid-cols-4 gap-3 items-end">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium">Meeting ID</label>
-              <input className="mt-1 w-full border rounded px-3 py-2" value={meetingId} onChange={e=>setMeetingId(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Audio file</label>
-              <input className="mt-1 w-full" type="file" accept="audio/*,.wav,.mp3,.m4a" onChange={e=>setFile(e.target.files?.[0] || null)} />
-            </div>
-            <div className="flex gap-2">
-              <button disabled={uploading || !file} onClick={handleUpload} className="w-full h-10 mt-6 rounded-xl bg-blue-600 text-white disabled:opacity-50">{uploading ? 'Uploading…' : 'Upload'}</button>
-              <button onClick={()=>setMeetingId(uuidv4())} className="h-10 mt-6 px-3 rounded-xl border">New UUID</button>
-            </div>
-          </div>
-          {uploadStatus && <p className="text-sm text-gray-600">Status: {uploadStatus}</p>}
-        </section>
+      <div className="flex px-12 gap-12">
+        {/* Sidebar Navigation */}
+        <aside className="w-40 flex flex-col gap-4">
+          <button 
+            onClick={() => setCurrentView('home')} 
+            className={`notably-button-outline ${currentView === 'home' ? 'bg-green-500 bg-opacity-10' : ''}`}
+          >
+            Home
+          </button>
+          <button 
+            onClick={() => setShowSettings(!showSettings)} 
+            className="notably-button-outline"
+          >
+            Settings
+          </button>
+          <button 
+            onClick={() => setCurrentView('api')} 
+            className="notably-button-outline text-xs leading-tight"
+          >
+            API Docs
+          </button>
+          <button 
+            onClick={() => setCurrentView('faq')} 
+            className="notably-button-outline"
+          >
+            FAQ
+          </button>
+        </aside>
 
-        {/* Meeting viewer */}
-        <section className="bg-white p-4 rounded-2xl shadow space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="grow min-w-[260px]">
-              <label className="block text-sm font-medium">Select Meeting</label>
-              <select className="mt-1 w-full border rounded px-3 py-2" value={selectedMeeting} onChange={e=>onPickMeeting(e.target.value)}>
-                <option value="">— choose —</option>
+        {/* Main Content */}
+        <main className="flex-1">
+          {showSettings && (
+            <div className="notably-card-container mb-8">
+              <h3 className="notably-primary text-lg font-semibold mb-6">Configuration</h3>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium notably-primary mb-3 tracking-wide">API BASE URL</label>
+                  <input 
+                    className="notably-input" 
+                    value={baseUrl} 
+                    onChange={e=>setBaseUrl(e.target.value)} 
+                    placeholder="http://127.0.0.1:8000" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium notably-primary mb-3 tracking-wide">X-API-KEY (OPTIONAL)</label>
+                  <input 
+                    className="notably-input" 
+                    value={apiKey} 
+                    onChange={e=>setApiKey(e.target.value)} 
+                    placeholder="dev-api" 
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Upload Section */}
+          <section className="mb-10">
+            <h2 className="notably-primary text-base font-medium mb-3">Upload audio file</h2>
+            <div className="w-96">
+              <label htmlFor="file-upload" className="block">
+                <div className="notably-upload-box">
+                  <div className="w-10 h-10 mx-auto mb-4">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#00FF88" strokeWidth="2" className="w-full h-full">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7,10 12,15 17,10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                  </div>
+                  <h3 className="notably-primary text-lg font-semibold mb-2">Click to upload</h3>
+                  <p className="notably-secondary text-sm">or drag and drop</p>
+                  <p className="notably-tertiary text-xs mt-2">WAV, MP3, M4A files</p>
+                  {file && (
+                    <p className="notably-text text-sm mt-3 font-medium">{file.name}</p>
+                  )}
+                </div>
+              </label>
+              <input 
+                id="file-upload"
+                type="file" 
+                accept="audio/*,.wav,.mp3,.m4a" 
+                onChange={e=>setFile(e.target.files?.[0] || null)}
+                className="hidden"
+              />
+            </div>
+            
+            <div className="mt-6 flex items-center gap-4">
+              <div className="flex-1 max-w-md">
+                <label className="block text-sm font-medium notably-primary mb-2 tracking-wide">MEETING ID</label>
+                <input 
+                  className="notably-input" 
+                  value={meetingId} 
+                  onChange={e=>setMeetingId(e.target.value)} 
+                />
+              </div>
+              <div className="flex gap-3 mt-7">
+                <button 
+                  disabled={uploading || !file} 
+                  onClick={handleUpload} 
+                  className="notably-button disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? 'Uploading…' : 'Upload'}
+                </button>
+                <button 
+                  onClick={()=>setMeetingId(uuidv4())} 
+                  className="notably-button-outline"
+                >
+                  New UUID
+                </button>
+              </div>
+            </div>
+            
+            {uploadStatus && (
+              <div className="mt-4 p-3 notably-dark rounded-lg">
+                <p className="text-sm notably-text">Status: {uploadStatus}</p>
+              </div>
+            )}
+          </section>
+
+          {/* Recent Files Dashboard */}
+          <section className="max-w-4xl">
+            <h2 className="notably-primary text-lg font-medium mb-5">Recent Files</h2>
+            
+            <div className="mb-6 flex items-center gap-4">
+              <select 
+                className="notably-input max-w-sm" 
+                value={selectedMeeting} 
+                onChange={e=>onPickMeeting(e.target.value)}
+              >
+                <option value="">— Select Meeting —</option>
                 {meetings.map((m, i) => (
-                  <option key={m.id || i} value={m.id || m.meeting_id || m}> {m.id || m.meeting_id || m} </option>
+                  <option key={m.id || i} value={m.id || m.meeting_id || m}>
+                    {m.id || m.meeting_id || m}
+                  </option>
                 ))}
               </select>
+              <div className="flex gap-3">
+                <button 
+                  onClick={exportMD} 
+                  disabled={!selectedMeeting} 
+                  className="notably-button-outline disabled:opacity-50"
+                >
+                  Export MD
+                </button>
+                <button 
+                  onClick={exportPDF} 
+                  disabled={!selectedMeeting} 
+                  className="notably-button-outline disabled:opacity-50"
+                >
+                  Export PDF
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={exportMD} disabled={!selectedMeeting} className="px-3 h-10 rounded-xl border">Export MD</button>
-              <button onClick={exportPDF} disabled={!selectedMeeting} className="px-3 h-10 rounded-xl border">Export PDF</button>
-            </div>
-          </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="md:col-span-2 space-y-3">
-              <h3 className="font-semibold">Summary</h3>
-              {summary?.bullets?.length ? (
-                <ul className="list-disc pl-6">
-                  {summary.bullets.map(b => (
-                    <li key={b.id} className="mb-1">{b.text} {b.citations?.length ? <span className="text-xs text-gray-500">[{b.citations.map(c => `${c.t_start_str}–${c.t_end_str}`).join(', ')}]</span> : null}</li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-gray-500">No bullets yet.</p>}
-
-              <h3 className="font-semibold mt-4">Transcript</h3>
-              <div className="max-h-64 overflow-auto border rounded p-3">
-                {transcript.length ? transcript.map(s => (
-                  <div key={s.id} className="py-1">
-                    <span className="text-xs text-gray-500 mr-2">[{s.t_start_str}]</span>
-                    <span>{s.text}</span>
+            <div className="flex flex-col gap-4">
+              {meetings.slice(0, 5).map((meeting, i) => (
+                <div 
+                  key={meeting.id || i} 
+                  className="notably-file-item cursor-pointer"
+                  onClick={() => onPickMeeting(meeting.id || meeting.meeting_id || meeting)}
+                >
+                  <div>
+                    <h3 className="font-medium notably-text">
+                      Meeting {meeting.id || meeting.meeting_id || meeting}
+                    </h3>
+                    <p className="text-sm notably-secondary">
+                      Audio transcription and analysis
+                    </p>
                   </div>
-                )) : <p className="text-sm text-gray-500">No transcript.</p>}
-              </div>
+                  <button className="notably-button px-7 text-sm">
+                    Open
+                  </button>
+                </div>
+              ))}
+              {!meetings.length && (
+                <p className="notably-secondary text-center py-8">No meetings found. Upload an audio file to get started.</p>
+              )}
             </div>
-
-            <div className="space-y-3">
-              <h3 className="font-semibold">Actions</h3>
-              <div className="flex gap-2">
-                <input className="flex-1 border rounded px-3 py-2" placeholder="Action text" value={actionText} onChange={e=>setActionText(e.target.value)} />
-                <select className="w-24 border rounded px-2" value={actionPriority} onChange={e=>setActionPriority(e.target.value)}>
-                  <option value={1}>P1</option>
-                  <option value={2}>P2</option>
-                  <option value={3}>P3</option>
-                </select>
-                <button onClick={createAction} disabled={!selectedMeeting} className="px-3 rounded-xl bg-emerald-600 text-white">Add</button>
-              </div>
-              <ul className="space-y-2">
-                {actions.map(a => (
-                  <li key={a.id} className="flex items-center gap-2">
-                    <input type="checkbox" checked={!!a.is_done} onChange={()=>toggleAction(a)} />
-                    <span className={a.is_done ? 'line-through text-gray-500' : ''}>{a.text}</span>
-                  </li>
-                ))}
-                {!actions.length && <p className="text-sm text-gray-500">No actions yet.</p>}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Search */}
-        <section className="bg-white p-4 rounded-2xl shadow space-y-3">
-          <h2 className="text-lg font-semibold">Search</h2>
-          <div className="flex gap-2">
-            <input className="flex-1 border rounded px-3 py-2" placeholder="search terms (supports phrases, -negation)" value={searchQ} onChange={e=>setSearchQ(e.target.value)} />
-            <button className="px-3 rounded-xl bg-indigo-600 text-white" onClick={doSearch}>Search</button>
-          </div>
-          <p className="text-sm text-gray-600">{searchTotal} results</p>
-          <div className="grid md:grid-cols-2 gap-3">
-            {searchResults.map((it, idx) => (
-              <div key={idx} className="border rounded-xl p-3">
-                <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">{it.kind || 'result'}</div>
-                <div className="font-medium">{it.text}</div>
-                {it.t_start_str && <div className="text-xs text-gray-500 mt-1">[{it.t_start_str}–{it.t_end_str}]</div>}
-                {it.snippet && <div className="text-sm text-gray-600 mt-2">…{it.snippet}…</div>}
-              </div>
-            ))}
-            {!searchResults.length && <p className="text-sm text-gray-500">No results yet.</p>}
-          </div>
-        </section>
-
+          </section>
+        </main>
       </div>
+
+      {/* Meeting Viewer Modal/Card */}
+      {selectedMeeting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-8" onClick={(e) => {
+          if (e.target === e.currentTarget) setSelectedMeeting('');
+        }}>
+          <div className="notably-card-container max-w-6xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="notably-primary text-xl font-semibold">
+                Meeting: {selectedMeeting}
+              </h2>
+              <button 
+                onClick={() => setSelectedMeeting('')}
+                className="notably-secondary text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="md:col-span-2 space-y-6">
+                {/* Summary */}
+                <div>
+                  <h3 className="notably-primary font-semibold text-lg mb-3">Summary</h3>
+                  <div className="notably-dark p-4 rounded-lg">
+                    {summary?.bullets?.length ? (
+                      <ul className="space-y-2">
+                        {summary.bullets.map(b => (
+                          <li key={b.id} className="notably-text">
+                            • {b.text}
+                            {b.citations?.length && (
+                              <span className="notably-secondary text-xs ml-2">
+                                [{b.citations.map(c => `${c.t_start_str}–${c.t_end_str}`).join(', ')}]
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : <p className="notably-secondary">No summary available yet.</p>}
+                  </div>
+                </div>
+
+                {/* Transcript */}
+                <div>
+                  <h3 className="notably-primary font-semibold text-lg mb-3">Transcript</h3>
+                  <div className="notably-dark p-4 rounded-lg max-h-64 overflow-auto">
+                    {transcript.length ? transcript.map(s => (
+                      <div key={s.id} className="py-2 border-b border-gray-800 last:border-b-0">
+                        <span className="notably-primary font-bold text-sm mr-3">
+                          [{s.t_start_str}]
+                        </span>
+                        <span className="notably-text">{s.text}</span>
+                      </div>
+                    )) : <p className="notably-secondary">No transcript available.</p>}
+                  </div>
+                </div>
+
+                {/* Search */}
+                <div>
+                  <h3 className="notably-primary font-semibold text-lg mb-3">Search Transcript</h3>
+                  <div className="flex gap-3 mb-4">
+                    <input 
+                      className="notably-input flex-1" 
+                      placeholder="Find keywords, speakers, or timestamps" 
+                      value={searchQ} 
+                      onChange={e=>setSearchQ(e.target.value)} 
+                    />
+                    <button className="notably-button px-6" onClick={doSearch}>
+                      Search
+                    </button>
+                  </div>
+                  <p className="notably-secondary text-sm mb-3">{searchTotal} results</p>
+                  <div className="space-y-3">
+                    {searchResults.map((it, idx) => (
+                      <div key={idx} className="notably-dark p-3 rounded-lg">
+                        <div className="notably-primary text-xs uppercase tracking-wide mb-1">
+                          {it.kind || 'result'}
+                        </div>
+                        <div className="notably-text font-medium">{it.text}</div>
+                        {it.t_start_str && (
+                          <div className="notably-secondary text-xs mt-1">
+                            [{it.t_start_str}–{it.t_end_str}]
+                          </div>
+                        )}
+                        {it.snippet && (
+                          <div className="notably-secondary text-sm mt-2">…{it.snippet}…</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions Panel */}
+              <div className="space-y-6">
+                <div>
+                  <h3 className="notably-primary font-semibold text-lg mb-3">Actions</h3>
+                  <div className="space-y-3">
+                    <input 
+                      className="notably-input" 
+                      placeholder="Action text" 
+                      value={actionText} 
+                      onChange={e=>setActionText(e.target.value)} 
+                    />
+                    <div className="flex gap-2">
+                      <select 
+                        className="notably-input w-20" 
+                        value={actionPriority} 
+                        onChange={e=>setActionPriority(e.target.value)}
+                      >
+                        <option value={1}>P1</option>
+                        <option value={2}>P2</option>
+                        <option value={3}>P3</option>
+                      </select>
+                      <button 
+                        onClick={createAction} 
+                        disabled={!selectedMeeting} 
+                        className="notably-button flex-1 disabled:opacity-50"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 space-y-3">
+                    {actions.map(a => (
+                      <div key={a.id} className="flex items-center gap-3 p-3 notably-dark rounded-lg">
+                        <input 
+                          type="checkbox" 
+                          checked={!!a.is_done} 
+                          onChange={()=>toggleAction(a)}
+                          className="w-4 h-4"
+                        />
+                        <span className={`notably-text ${a.is_done ? 'line-through opacity-50' : ''}`}>
+                          {a.text}
+                        </span>
+                      </div>
+                    ))}
+                    {!actions.length && (
+                      <p className="notably-secondary text-center py-4">No actions yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

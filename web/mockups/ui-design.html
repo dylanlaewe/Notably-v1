@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notably UI Design Mockup</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for mockup */
+        .mockup-section {
+            border: 2px dashed #e5e7eb;
+            background: #f9fafb;
+        }
+        .component-label {
+            background: #3b82f6;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 0.25rem;
+            position: absolute;
+            top: -0.5rem;
+            left: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-6 space-y-6">
+        
+        <!-- Header Section -->
+        <div class="relative mockup-section p-6 rounded-lg">
+            <span class="component-label">Header Component</span>
+            <h1 class="text-3xl font-bold text-gray-800">Notably</h1>
+            <p class="text-gray-600">Meeting Intelligence Platform</p>
+            <div class="mt-4 flex space-x-4">
+                <button class="px-4 py-2 bg-blue-600 text-white rounded">Dashboard</button>
+                <button class="px-4 py-2 text-gray-600 hover:text-gray-800">Meetings</button>
+                <button class="px-4 py-2 text-gray-600 hover:text-gray-800">Analytics</button>
+                <button class="px-4 py-2 text-gray-600 hover:text-gray-800">Settings</button>
+            </div>
+        </div>
+
+        <!-- Config Panel -->
+        <div class="relative mockup-section p-6 rounded-lg">
+            <span class="component-label">Config Panel</span>
+            <h3 class="text-lg font-semibold mb-4">API Configuration</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">API Base URL</label>
+                    <input type="text" placeholder="http://127.0.0.1:8000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">API Key (optional)</label>
+                    <input type="password" placeholder="dev-api-key" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="relative mockup-section p-6 rounded-lg">
+            <span class="component-label">Upload Component</span>
+            <h3 class="text-lg font-semibold mb-4">Upload Audio File</h3>
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium mb-2">Meeting ID</label>
+                    <input type="text" placeholder="abc123-def456-ghi789" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Actions</label>
+                    <button class="px-4 py-2 border border-gray-300 rounded-lg">🔄 New ID</button>
+                </div>
+            </div>
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <p class="text-gray-600">📁 Drag & drop audio file here or click to browse</p>
+                <p class="text-sm text-gray-500 mt-2">Supports WAV, MP3, M4A files</p>
+            </div>
+            <button class="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg w-full">Upload & Process</button>
+        </div>
+
+        <!-- Meeting Viewer Grid -->
+        <div class="grid grid-cols-3 gap-6">
+            
+            <!-- Summary Column -->
+            <div class="relative mockup-section p-6 rounded-lg col-span-2">
+                <span class="component-label">Meeting Summary</span>
+                <h3 class="text-lg font-semibold mb-4">Summary & Transcript</h3>
+                
+                <!-- Summary Bullets -->
+                <div class="mb-6">
+                    <h4 class="font-medium mb-2">Key Points:</h4>
+                    <ul class="space-y-2">
+                        <li class="flex items-start">
+                            <span class="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
+                            <span class="text-gray-700">Discussed project timeline and milestones</span>
+                            <span class="text-xs text-gray-500 ml-2">[2:15-3:30]</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
+                            <span class="text-gray-700">Reviewed budget allocation for Q4</span>
+                            <span class="text-xs text-gray-500 ml-2">[8:45-10:20]</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></span>
+                            <span class="text-gray-700">Next steps for team coordination</span>
+                            <span class="text-xs text-gray-500 ml-2">[15:10-16:45]</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Transcript -->
+                <div>
+                    <h4 class="font-medium mb-2">Transcript:</h4>
+                    <div class="bg-white p-4 rounded border max-h-48 overflow-y-auto">
+                        <div class="space-y-2 text-sm">
+                            <p><span class="text-gray-500">[00:15]</span> Welcome everyone to today's meeting...</p>
+                            <p><span class="text-gray-500">[01:30]</span> Let's start by reviewing the agenda...</p>
+                            <p><span class="text-gray-500">[02:45]</span> First item is the project timeline...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Column -->
+            <div class="relative mockup-section p-6 rounded-lg">
+                <span class="component-label">Action Items</span>
+                <h3 class="text-lg font-semibold mb-4">Action Items</h3>
+                
+                <!-- Add Action Form -->
+                <div class="mb-4">
+                    <input type="text" placeholder="Add new action item..." class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2">
+                    <div class="flex gap-2">
+                        <select class="px-3 py-2 border border-gray-300 rounded-lg">
+                            <option>P1</option>
+                            <option>P2</option>
+                            <option>P3</option>
+                        </select>
+                        <button class="px-4 py-2 bg-green-600 text-white rounded-lg">Add</button>
+                    </div>
+                </div>
+
+                <!-- Action Items List -->
+                <div class="space-y-3">
+                    <div class="flex items-center space-x-2 p-2 bg-white rounded border">
+                        <input type="checkbox" class="rounded">
+                        <span class="flex-1">Schedule follow-up meeting</span>
+                        <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">P1</span>
+                    </div>
+                    <div class="flex items-center space-x-2 p-2 bg-white rounded border">
+                        <input type="checkbox" checked class="rounded">
+                        <span class="flex-1 line-through text-gray-500">Send meeting notes</span>
+                        <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">P2</span>
+                    </div>
+                    <div class="flex items-center space-x-2 p-2 bg-white rounded border">
+                        <input type="checkbox" class="rounded">
+                        <span class="flex-1">Update project documentation</span>
+                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">P3</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="relative mockup-section p-6 rounded-lg">
+            <span class="component-label">Search Interface</span>
+            <h3 class="text-lg font-semibold mb-4">Search Meetings</h3>
+            <div class="flex gap-4 mb-4">
+                <input type="text" placeholder="Search transcripts, summaries, action items..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
+                <button class="px-6 py-2 bg-indigo-600 text-white rounded-lg">Search</button>
+            </div>
+            
+            <!-- Search Results -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 bg-white border rounded-lg">
+                    <div class="text-xs text-gray-500 uppercase mb-1">Transcript</div>
+                    <div class="font-medium">Project deadline discussion</div>
+                    <div class="text-xs text-gray-500 mt-1">[5:30-6:15]</div>
+                    <div class="text-sm text-gray-600 mt-2">...need to finalize the timeline by next week...</div>
+                </div>
+                <div class="p-4 bg-white border rounded-lg">
+                    <div class="text-xs text-gray-500 uppercase mb-1">Action Item</div>
+                    <div class="font-medium">Review budget proposal</div>
+                    <div class="text-sm text-gray-600 mt-2">Assigned to finance team for Q4 planning</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Design Notes -->
+    <div class="fixed bottom-4 right-4 bg-white p-4 rounded-lg shadow-lg border max-w-sm">
+        <h4 class="font-semibold text-sm mb-2">🎨 Design Notes</h4>
+        <ul class="text-xs text-gray-600 space-y-1">
+            <li>• Clean, minimal interface</li>
+            <li>• Clear visual hierarchy</li>
+            <li>• Consistent spacing and typography</li>
+            <li>• Accessible color contrasts</li>
+            <li>• Mobile-responsive layout</li>
+        </ul>
+    </div>
+</body>
+</html>

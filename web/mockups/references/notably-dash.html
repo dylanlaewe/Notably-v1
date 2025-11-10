@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notably - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #000000;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .top-bar {
+            background: #0a4a6e;
+            height: 8px;
+            width: 100%;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 30px 50px;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .logo-icon {
+            width: 200px;
+            height: 130px;
+            position: relative;
+        }
+
+        .logo-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .logout-btn {
+            background: #00ff88;
+            color: #000000;
+            border: none;
+            padding: 12px 35px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: #00dd77;
+            transform: translateY(-2px);
+        }
+
+        .main-container {
+            display: flex;
+            padding: 0 50px;
+            gap: 50px;
+        }
+
+        .sidebar {
+            width: 150px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .nav-btn {
+            background: transparent;
+            color: #00ff88;
+            border: 2px solid #00ff88;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(0, 255, 136, 0.1);
+            transform: translateX(5px);
+        }
+
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .upload-section {
+            margin-bottom: 40px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .upload-title {
+            color: #00ff88;
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            align-self: flex-start;
+        }
+
+        .upload-box {
+            border: 2px dashed #00ff88;
+            border-radius: 12px;
+            padding: 30px 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(0, 255, 136, 0.03);
+            position: relative;
+            width: 500px;
+            display: inline-block;
+        }
+        
+        .upload-section label {
+            display: block;
+        }
+
+        .upload-box:hover {
+            background: rgba(0, 255, 136, 0.08);
+            border-color: #00dd77;
+            transform: translateY(-2px);
+        }
+
+        .upload-icon {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 15px;
+        }
+
+        .upload-box h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #00ff88;
+        }
+
+        .upload-box p {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .upload-box .file-types {
+            color: #666;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .dashboard-section {
+            max-width: 700px;
+            width: 100%;
+        }
+        
+        .dashboard-section h2 {
+            color: #00ff88;
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .file-item {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 20px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .file-item:hover {
+            border-color: #00ff88;
+            background: #151515;
+        }
+
+        .file-info h3 {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .file-info p {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .download-btn {
+            background: #00ff88;
+            color: #000000;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .download-btn:hover {
+            background: #00dd77;
+            transform: scale(1.05);
+        }
+
+        .bottom-sidebar {
+            position: fixed;
+            bottom: 30px;
+            left: 50px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            background: #111;
+            border: 2px solid #00ff88;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .bottom-btn {
+            background: transparent;
+            color: #00ff88;
+            border: none;
+            border-bottom: 1px solid #00ff88;
+            padding: 15px 25px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bottom-btn:last-child {
+            border-bottom: none;
+        }
+
+        .bottom-btn:hover {
+            background: rgba(0, 255, 136, 0.1);
+        }
+
+        .icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+                padding: 0 20px;
+            }
+
+            .sidebar {
+                width: 100%;
+                flex-direction: row;
+                overflow-x: auto;
+            }
+
+            .header {
+                padding: 20px 30px;
+            }
+
+            .bottom-sidebar {
+                position: relative;
+                left: auto;
+                bottom: auto;
+                margin-top: 30px;
+            }
+
+            .bottom-btn {
+                padding: 12px 20px;
+            }
+
+            .bottom-btn:last-child {
+                border-bottom: 1px solid #00ff88;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar"></div>
+
+    <header class="header">
+        <div class="logo-container">
+            <div class="logo-icon">
+                <!-- Replace with actual logo -->
+                <div style="color: #00FF88; font-size: 36px; font-weight: bold;">Notably</div>
+            </div>
+        </div>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar">
+            <button class="nav-btn" onclick="navigateTo('home')">Home</button>
+            <button class="nav-btn" onclick="navigateTo('settings')">Settings</button>
+            <button class="nav-btn" onclick="navigateTo('api')">API Documentations</button>
+            <button class="nav-btn" onclick="navigateTo('faq')">FAQ</button>
+        </aside>
+
+        <main class="content">
+            <section class="upload-section">
+                <h2 class="upload-title">Upload audio file</h2>
+                <label for="file-upload">
+                    <div class="upload-box">
+                        <div class="upload-icon">📁</div>
+                        <h3>Click to upload</h3>
+                        <p>or drag and drop</p>
+                        <p class="file-types">WAV, MP3, M4A files</p>
+                    </div>
+                </label>
+                <input type="file" id="file-upload" accept="audio/*" onchange="handleFileUpload(event)">
+            </section>
+
+            <section class="dashboard-section">
+                <h2>Recent Files</h2>
+                <div class="file-list">
+                    <div class="file-item">
+                        <div class="file-info">
+                            <h3>Meeting_2024-04-22.mp4</h3>
+                            <p>Audio transcription and analysis</p>
+                        </div>
+                        <button class="download-btn" onclick="handleDownload('Meeting_2024-04-22.mp4')">Download</button>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-info">
+                            <h3>Conference_Call_April15.m4a</h3>
+                            <p>Team standup meeting notes</p>
+                        </div>
+                        <button class="download-btn" onclick="handleDownload('Conference_Call_April15.m4a')">Download</button>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-info">
+                            <h3>Client_Presentation_Q1.wav</h3>
+                            <p>Quarterly business review</p>
+                        </div>
+                        <button class="download-btn" onclick="handleDownload('Client_Presentation_Q1.wav')">Download</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <aside class="bottom-sidebar">
+        <button class="bottom-btn" onclick="navigateTo('general')">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            General
+        </button>
+        <button class="bottom-btn" onclick="navigateTo('account')">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Account
+        </button>
+    </aside>
+
+    <script>
+        function handleLogout() {
+            if (confirm('Are you sure you want to logout?')) {
+                alert('Logout functionality - redirect to login page');
+                // window.location.href = '/login';
+            }
+        }
+
+        function navigateTo(page) {
+            alert(`Navigating to: ${page}`);
+            // window.location.href = `/${page}`;
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                alert(`File selected: ${file.name}`);
+                // Here you would typically:
+                // 1. Show upload progress
+                // 2. Send file to backend
+                // 3. Update file list
+                // 4. Show success/error message
+                
+                // Simulate upload process
+                const uploadBox = document.querySelector('.upload-box');
+                const originalContent = uploadBox.innerHTML;
+                
+                uploadBox.innerHTML = `
+                    <div style="color: #00ff88;">
+                        <div style="font-size: 24px;">📤</div>
+                        <h3>Uploading...</h3>
+                        <p style="color: #888;">Processing ${file.name}</p>
+                    </div>
+                `;
+                
+                // Simulate upload completion after 2 seconds
+                setTimeout(() => {
+                    uploadBox.innerHTML = `
+                        <div style="color: #00ff88;">
+                            <div style="font-size: 24px;">✅</div>
+                            <h3>Upload Complete!</h3>
+                            <p style="color: #888;">${file.name} processed</p>
+                        </div>
+                    `;
+                    
+                    // Reset after 2 more seconds
+                    setTimeout(() => {
+                        uploadBox.innerHTML = originalContent;
+                    }, 2000);
+                }, 2000);
+            }
+        }
+
+        function handleDownload(filename) {
+            alert(`Downloading: ${filename}`);
+            // Implement actual download logic here
+        }
+
+        // Drag and drop functionality
+        const uploadBox = document.querySelector('.upload-box');
+        
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.style.background = 'rgba(0, 255, 136, 0.15)';
+        });
+        
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.style.background = 'rgba(0, 255, 136, 0.03)';
+        });
+        
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>

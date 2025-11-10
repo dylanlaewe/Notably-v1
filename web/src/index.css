@@ -1,68 +1,167 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+}
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+body {
+  background: #000000;
+  color: #ffffff;
+  min-height: 100vh;
+  margin: 0;
+  display: block;
+  place-items: unset;
 }
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #00FF88;
   text-decoration: inherit;
 }
-a:hover {
-  color: #535bf2;
-}
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+a:hover {
+  color: #00dd77;
 }
 
 h1 {
-  font-size: 3.2em;
+  font-size: 2em;
   line-height: 1.1;
+  color: #00FF88;
 }
 
-button {
+h2 {
+  color: #00FF88;
+  font-size: 1.5em;
+  font-weight: 600;
+}
+
+h3 {
+  color: #FFFFFF;
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+/* Notably Design System */
+.notably-primary { color: #00FF88; }
+.notably-primary-bg { background-color: #00FF88; }
+.notably-secondary { color: #888888; }
+.notably-tertiary { color: #666666; }
+.notably-text { color: #CCCCCC; }
+.notably-dark { background-color: #0A0A0A; }
+.notably-card { background: linear-gradient(180deg, #1A1A1A 0%, #0F0F0F 100%); }
+.notably-border { border-color: #2A2A2A; }
+
+/* Component Styles */
+.notably-button {
+  background: #00FF88;
+  color: #000000;
+  border: none;
+  padding: 12px 35px;
   border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: all 0.3s ease;
 }
-button:hover {
-  border-color: #646cff;
+
+.notably-button:hover {
+  background: #00dd77;
+  transform: translateY(-2px);
 }
+
+.notably-button-outline {
+  background: transparent;
+  color: #00FF88;
+  border: 2px solid #00FF88;
+  padding: 15px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.notably-button-outline:hover {
+  background: rgba(0, 255, 136, 0.1);
+  transform: translateX(5px);
+}
+
+.notably-input {
+  background: #0A0A0A;
+  border: 1.5px solid #2A2A2A;
+  border-radius: 8px;
+  padding: 16px 20px;
+  color: #CCCCCC;
+  font-size: 15px;
+  font-family: inherit;
+  width: 100%;
+  transition: border-color 0.3s ease;
+}
+
+.notably-input:focus {
+  outline: none;
+  border-color: #00FF88;
+}
+
+.notably-input::placeholder {
+  color: #666666;
+}
+
+.notably-card-container {
+  background: linear-gradient(180deg, #1A1A1A 0%, #0F0F0F 100%);
+  border: 2px solid rgba(0, 255, 136, 0.3);
+  border-radius: 16px;
+  padding: 40px;
+}
+
+.notably-upload-box {
+  border: 2px dashed #00FF88;
+  border-radius: 12px;
+  padding: 30px 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(0, 255, 136, 0.03);
+}
+
+.notably-upload-box:hover {
+  background: rgba(0, 255, 136, 0.08);
+  border-color: #00dd77;
+  transform: translateY(-2px);
+}
+
+.notably-file-item {
+  background: #111111;
+  border: 1px solid #222222;
+  border-radius: 8px;
+  padding: 20px 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.notably-file-item:hover {
+  border-color: #00FF88;
+  background: #151515;
+}
+
+/* Reset default button styles */
+button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+  outline: 2px solid #00FF88;
+  outline-offset: 2px;
 }
