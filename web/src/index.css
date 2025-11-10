@@ -10,13 +10,17 @@
   box-sizing: border-box;
 }
 
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
 body {
   background: #000000;
   color: #ffffff;
-  min-height: 100vh;
   margin: 0;
-  display: block;
-  place-items: unset;
+  position: relative;
 }
 
 a {

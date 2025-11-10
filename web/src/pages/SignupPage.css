@@ -1,0 +1,232 @@
+/* SignupPage.css - Clean separation of styles */
+
+/* Main container - full viewport coverage */
+.signup-page {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000;
+  overflow: hidden;
+}
+
+/* Center wrapper for absolute positioning */
+.signup-center-wrapper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: auto;
+}
+
+/* Main content container */
+.signup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Branding section container */
+.signup-branding {
+  width: 600px;
+  margin-bottom: 32px;
+}
+
+/* Logo section */
+.signup-logo-section {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.signup-logo {
+  height: 80px;
+  width: auto;
+  max-width: 400px;
+  display: block;
+  margin: 0 auto;
+}
+
+.signup-logo-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.signup-logo-button:hover {
+  background-color: rgba(0, 255, 136, 0.1);
+  transform: scale(1.05);
+}
+
+.signup-logo-button:active {
+  transform: scale(0.98);
+}
+
+/* Main signup card */
+.signup-card {
+  width: 600px;
+  background: linear-gradient(to bottom, #1A1A1A 0%, #0F0F0F 100%);
+  border: 2px solid rgba(0, 255, 136, 0.3);
+  border-radius: 16px;
+  padding: 64px;
+  text-align: center;
+}
+
+/* Create Account title */
+.signup-title {
+  font-size: 2.25rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 48px;
+  text-align: center;
+}
+
+/* Form styling */
+.signup-form {
+  text-align: left;
+}
+
+.signup-form > div {
+  margin-bottom: 24px;
+}
+
+/* Form field container */
+.signup-form-field {
+  margin-bottom: 24px;
+}
+
+/* Form labels */
+.signup-form-label {
+  color: #00FF88;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+/* Input field styling */
+.signup-input {
+  height: 54px;
+  border-radius: 8px;
+  background-color: #0A0A0A;
+  border: 1.5px solid #2A2A2A;
+  padding-left: 16px;
+  padding-right: 16px;
+  font-size: 16px;
+  color: #FFFFFF;
+  width: 100%;
+  transition: border-color 0.3s ease;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.signup-input:focus {
+  outline: none;
+  border-color: #00FF88;
+}
+
+.signup-input::placeholder {
+  color: #666666;
+}
+
+/* Create Account button */
+.signup-button {
+  height: 56px;
+  border-radius: 28px;
+  background-color: #000000;
+  border: 2px solid #00FF88;
+  color: #00FF88;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 32px;
+  transition: all 0.3s ease;
+}
+
+.signup-button:hover {
+  background-color: #00FF88;
+  color: #000000;
+}
+
+.signup-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Login link section */
+.signup-login-link {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 15px;
+}
+
+.signup-login-text {
+  color: #888888;
+}
+
+.signup-login-button {
+  color: #00FF88;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.signup-login-button:hover {
+  opacity: 0.8;
+}
+
+/* Success screen styles */
+.signup-success-container {
+  min-height: 100vh;
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signup-success-card {
+  background: linear-gradient(to bottom, #1A1A1A 0%, #0F0F0F 100%);
+  border: 2px solid rgba(0, 255, 136, 0.3);
+  border-radius: 16px;
+  padding: 64px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.signup-success-title {
+  font-size: 1.875rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 24px;
+}
+
+.signup-success-message {
+  color: #9CA3AF;
+  margin-bottom: 32px;
+}
+
+.signup-goto-login-btn {
+  height: 56px;
+  border-radius: 28px;
+  background-color: #00FF88;
+  color: #0A0A0A;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.signup-goto-login-btn:hover {
+  opacity: 0.9;
+}
