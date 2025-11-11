@@ -9,6 +9,7 @@ import sys
 import hashlib
 import shutil
 from io import BytesIO
+from .access import ensure_meeting_exists
 
 # MinIO client (support old name get_client)
 try:
@@ -127,6 +128,9 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
         u.status = "processing"
         db.add(u)
         db.commit()
+
+        # ensure a meeting row exists for access checks
+        ensure_meeting_exists(db, meeting_id)
 
         # small delay so you can observe the transition
         sleep(1.0)

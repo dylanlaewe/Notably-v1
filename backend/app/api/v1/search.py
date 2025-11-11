@@ -3,13 +3,22 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional, Tuple, Iterable, Set
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...db import SessionLocal
+from backend.app.auth import require_user, UserContext
+from backend.app.access import assert_user_can_access_meeting
 
 router = APIRouter(prefix="/v1", tags=["search"])
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # ------------- logging (same tee) -------------
 _LOG_PATH = os.getenv("NOTABLY_LOG_FILE", "/tmp/notably_worker.log")

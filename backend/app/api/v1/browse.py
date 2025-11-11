@@ -3,11 +3,12 @@ from __future__ import annotations
 import os
 import re
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func, case, desc
-
+from backend.app.auth import require_user, UserContext
+from backend.app.access import assert_user_can_access_meeting
 from ...db import SessionLocal
 from ...models import (
     Upload,
@@ -19,6 +20,13 @@ from ...models import (
 )
 
 router = APIRouter(prefix="/v1", tags=["browse", "search"])
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # ---------------------------
 # Logging
@@ -73,13 +81,16 @@ def _get_latest_summary_for_meeting(db: Session, meeting_id: str) -> Optional[Su
 # Endpoints
 # ---------------------------
 
-@router.get("/meetings/{meeting_id}/transcript", response_class=JSONResponse)
+@router.get("/meetings/{meeting_id}/transcript")
 def get_transcript(
     meeting_id: str,
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: int = 100,
+    offset: int = 0,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
 ):
-    db = SessionLocal()
+    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+
     try:
         t = _get_latest_transcript_for_meeting(db, meeting_id)
         if not t:
@@ -116,9 +127,13 @@ def get_transcript(
         db.close()
 
 
-@router.get("/meetings/{meeting_id}/summary", response_class=JSONResponse)
-def get_summary(meeting_id: str):
-    db = SessionLocal()
+@router.get("/meetings/{meeting_id}/summary")
+def get_summary(
+    meeting_id: str,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    assert_user_can_access_meeting(db, user.user_id, meeting_id)
     try:
         s = _get_latest_summary_for_meeting(db, meeting_id)
         if not s:
