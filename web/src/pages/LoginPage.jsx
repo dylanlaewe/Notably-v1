@@ -6,9 +6,6 @@ import './LoginPage.css';
 function LoginPage() {
   const navigate = useNavigate();
   
-  // User state
-  const [user, setUser] = useState(null);
-  
   // Form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +18,8 @@ function LoginPage() {
     
     if (email && password) {
       setTimeout(() => {
-        setUser({ email, name: email.split('@')[0] });
+        // Navigate to dashboard on successful login
+        navigate('/dashboard');
       }, 1000);
     } else {
       setLoading(false);
@@ -29,25 +27,10 @@ function LoginPage() {
     }
   };
 
-  // If user is logged in, show success screen
-  if (user) {
-    return (
-      <div className="login-success-container">
-        <div className="login-success-card">
-          <h1 className="login-success-title">
-            Welcome {user.name}!
-          </h1>
-          <p className="login-success-message">You are now logged in.</p>
-          <button 
-            onClick={() => setUser(null)}
-            className="login-logout-btn"
-          >
-            LOGOUT
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Navigate to signup page
+  const goToSignup = () => {
+    navigate('/signup');
+  };
 
   // Login form
   return (
