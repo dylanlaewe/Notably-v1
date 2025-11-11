@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 import './DashboardPage.css';
 import notablyLogo from '../assets/notably logo.png';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const { theme, setLightTheme, setDarkTheme, isLight } = useTheme();
   const [selectedFile, setSelectedFile] = useState(null);
+  const [showGeneralModal, setShowGeneralModal] = useState(false);
+  const [preferences, setPreferences] = useState({
+    language: 'English',
+    notifications: true
+  });
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {
@@ -15,8 +22,38 @@ const DashboardPage = () => {
   };
 
   const navigateTo = (page) => {
-    alert(`Navigating to: ${page}`);
-    // Will implement navigation logic later
+    if (page === 'general') {
+      setShowGeneralModal(true);
+    } else {
+      alert(`Navigating to: ${page}`);
+      // Will implement navigation logic later
+    }
+  };
+
+  const closeModal = () => {
+    setShowGeneralModal(false);
+  };
+
+  const handlePreferenceChange = (key, value) => {
+    if (key === 'theme') {
+      // Use theme context functions
+      if (value === 'light') {
+        setLightTheme();
+      } else {
+        setDarkTheme();
+      }
+    } else {
+      setPreferences(prev => ({
+        ...prev,
+        [key]: value
+      }));
+    }
+  };
+
+  const savePreferences = () => {
+    // Here you would typically save to backend
+    alert('Preferences saved!');
+    setShowGeneralModal(false);
   };
 
   const handleFileUpload = (event) => {
@@ -255,6 +292,86 @@ const DashboardPage = () => {
           Account
         </button>
       </aside>
+
+      {/* General Preferences Modal */}
+      {showGeneralModal && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>General Preferences</h2>
+              <button className="close-button" onClick={closeModal}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <line x1="18" y1="6" x2="6" y2="18" stroke="#00ff88" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="6" y1="6" x2="18" y2="18" stroke="#00ff88" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Language Section */}
+              <div className="preference-section">
+                <h3>Language</h3>
+                <p>Choose your preferred language</p>
+                <select 
+                  className="preference-dropdown"
+                  value={preferences.language}
+                  onChange={(e) => handlePreferenceChange('language', e.target.value)}
+                >
+                  <option value="English">English</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+                </select>
+              </div>
+
+              {/* Theme Section */}
+              <div className="preference-section">
+                <h3>Appearance</h3>
+                <p>Select your theme preference</p>
+                <div className="theme-buttons">
+                  <button 
+                    className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
+                    onClick={() => handlePreferenceChange('theme', 'light')}
+                  >
+                    <div className="theme-indicator"></div>
+                    Light
+                  </button>
+                  <button 
+                    className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
+                    onClick={() => handlePreferenceChange('theme', 'dark')}
+                  >
+                    <div className="theme-indicator active"></div>
+                    Dark
+                  </button>
+                </div>
+              </div>
+
+              {/* Notifications Section */}
+              <div className="preference-section">
+                <h3>Notifications</h3>
+                <p>Manage your notification preferences</p>
+                <div className="notification-toggle">
+                  <span>Enable push notifications</span>
+                  <label className="toggle-switch">
+                    <input 
+                      type="checkbox" 
+                      checked={preferences.notifications}
+                      onChange={(e) => handlePreferenceChange('notifications', e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="save-button" onClick={savePreferences}>
+                SAVE PREFERENCES
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
