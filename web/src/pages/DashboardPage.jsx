@@ -24,6 +24,8 @@ const DashboardPage = () => {
   const navigateTo = (page) => {
     if (page === 'general') {
       setShowGeneralModal(true);
+    } else if (page === 'api') {
+      navigate('/api-docs');
     } else {
       alert(`Navigating to: ${page}`);
       // Will implement navigation logic later
