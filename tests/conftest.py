@@ -102,6 +102,8 @@ def client(auth_headers):
 
 @pytest.fixture
 def fresh_meeting_id():
+    # Tests pass a random meeting id from the client side; server will create on upload.
+    import uuid
     return str(uuid.uuid4())
 
 
