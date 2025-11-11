@@ -19,6 +19,9 @@ from sqlalchemy import func
 from fastapi import Response
 from fastapi import Query
 from ...export_pdf import render_meeting_pdf
+from backend.app.team_ops import get_or_create_default_team
+from backend.app.access import assign_meeting_team_if_empty
+from backend.app.auth import require_user, UserContext
 
 
 # RQ (optional)
@@ -200,6 +203,7 @@ async def create_upload(
     meeting_id: str = Form(...),
     duration_sec: typing.Optional[float] = Form(None),
     db: Session = Depends(get_session),
+    user: UserContext = Depends (require_user),
     background_tasks: BackgroundTasks = None,
 ):
     # read once
@@ -275,6 +279,11 @@ async def create_upload(
             return UploadCreateResp(upload_id=existing.id, status=existing.status)
         raise
 
+    # Ensure the meeting is assigned to caller's team (idempotent)
+    team_id = get_or_create_default_team(db, user.user_id)
+    assign_meeting_team_if_empty(db, meeting_id, team_id)
+
+    # assign meeting to user's default team if empty        
     # Optional: push raw blob to MinIO
     if minio_enabled():
         try:

@@ -4,13 +4,22 @@ import os
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ...db import SessionLocal
+from backend.app.auth import require_user, UserContext
+from backend.app.access import assert_user_can_access_meeting
 
 router = APIRouter(prefix="/v1", tags=["actions"])
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # ---------------------------
 # Logging (same tee as worker)
@@ -181,11 +190,17 @@ def _attach_citations(db: Session, action_id: str, segment_ids: List[int]) -> in
 @router.get("/meetings/{meeting_id}/actions")
 def list_actions_for_meeting(
     meeting_id: str,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
     only_open: bool = Query(False, description="If true, only return is_done = false"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     order: str = Query("created_at_desc", description="created_at_desc|created_at_asc|due_at_asc|due_at_desc"),
-):
+
+): 
+    # 🔒 enforce access
+    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+    # ⬇️ list and return actions as before
     """
     List action items for a meeting with optional 'only_open' filter and ordering.
     Includes timestamp citations (segment_id + t_start/t_end strings).
@@ -248,7 +263,10 @@ def create_action_for_meeting(
         ...,
         description="Body: { text, due_at?, assignee?, priority?, citations?: [segment_id, ...] }",
     ),
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
 ):
+    assert_user_can_access_meeting(db, user.user_id, meeting_id)
     """
     Create an action item for a meeting. Optionally attach timestamp citations.
     """

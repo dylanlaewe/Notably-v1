@@ -4,14 +4,23 @@ import io
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...db import SessionLocal
+from backend.app.auth import require_user, UserContext
+from backend.app.access import assert_user_can_access_meeting
 
 router = APIRouter(prefix="/v1", tags=["export"])
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # ---------------------------
 # Logging (same tee as worker)
@@ -341,9 +350,15 @@ def _pdf_export_bytes(meeting_id: str, bullets: List[Dict[str, Any]], actions: L
 # Endpoints
 # ---------------------------
 
-@router.get("/meetings/{meeting_id}/export.md", response_class=PlainTextResponse)
-def export_md(meeting_id: str, filename: Optional[str] = Query(None)):
-    db = SessionLocal()
+@router.get("/meetings/{meeting_id}/export.md")
+def export_md(
+    meeting_id: str,
+    filename: str | None = None,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+
     try:
         sid, bullets = _fetch_summary(db, meeting_id)
         tid, segs = _fetch_transcript(db, meeting_id)
@@ -358,8 +373,14 @@ def export_md(meeting_id: str, filename: Optional[str] = Query(None)):
         db.close()
 
 @router.get("/meetings/{meeting_id}/export.pdf")
-def export_pdf(meeting_id: str, filename: Optional[str] = Query(None)):
-    db = SessionLocal()
+def export_pdf(
+    meeting_id: str,
+    filename: str | None = None,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+
     try:
         sid, bullets = _fetch_summary(db, meeting_id)
         tid, segs = _fetch_transcript(db, meeting_id)
