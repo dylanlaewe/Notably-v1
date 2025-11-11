@@ -6,9 +6,6 @@ import './SignupPage.css';
 function SignupPage() {
   const navigate = useNavigate();
   
-  // User state
-  const [user, setUser] = useState(null);
-  
   // Form state
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -42,7 +39,7 @@ function SignupPage() {
 
     // Simulate account creation
     setTimeout(() => {
-      setUser({ email, name: fullName });
+      navigate('/dashboard');
     }, 1000);
   };
 
@@ -50,26 +47,6 @@ function SignupPage() {
   const goToLogin = () => {
     navigate('/login');
   };
-
-  // If user is created, show success screen
-  if (user) {
-    return (
-      <div className="signup-success-container">
-        <div className="signup-success-card">
-          <h1 className="signup-success-title">
-            Account Created!
-          </h1>
-          <p className="signup-success-message">Welcome {user.name}! Your account has been created successfully.</p>
-          <button 
-            onClick={goToLogin}
-            className="signup-goto-login-btn"
-          >
-            GO TO LOGIN
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // Sign up form
   return (
