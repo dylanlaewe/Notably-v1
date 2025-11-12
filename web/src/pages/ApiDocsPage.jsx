@@ -11,13 +11,13 @@ const ApiDocsPage = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const sections = [
-    { id: 'overview', title: 'Overview', icon: '📋' },
-    { id: 'auth', title: 'Authentication', icon: '🔐' },
-    { id: 'models', title: 'Data Models', icon: '🗂️' },
-    { id: 'endpoints', title: 'API Endpoints', icon: '🔗' },
-    { id: 'errors', title: 'Error Handling', icon: '⚠️' },
-    { id: 'examples', title: 'Examples', icon: '💡' },
-    { id: 'openapi', title: 'OpenAPI Spec', icon: '📄' }
+    { id: 'overview', title: 'Overview' },
+    { id: 'auth', title: 'Authentication' },
+    { id: 'models', title: 'Data Models' },
+    { id: 'endpoints', title: 'API Endpoints' },
+    { id: 'errors', title: 'Error Handling' },
+    { id: 'examples', title: 'Examples' },
+    { id: 'openapi', title: 'OpenAPI Spec' }
   ];
 
   // Scroll detection for scroll-to-top button
@@ -87,7 +87,6 @@ const ApiDocsPage = () => {
                 className={`nav-item ${activeSection === section.id ? 'active' : ''}`}
                 onClick={() => scrollToSection(section.id)}
               >
-                <span className="nav-icon">{section.icon}</span>
                 <span className="nav-title">{section.title}</span>
               </button>
             ))}
@@ -103,7 +102,7 @@ const ApiDocsPage = () => {
 
           {/* Overview Section */}
           <section id="overview" className="docs-section">
-            <h2>🚀 High-Level Overview</h2>
+            <h2>High-Level Overview</h2>
             <p className="section-intro">
               The Notably API accepts meeting uploads, runs background processing (transcription + summarization), 
               and exposes results. Heavy work is async via a queue/worker. Clients poll status or subscribe to events.
@@ -158,7 +157,7 @@ const ApiDocsPage = () => {
 
           {/* Authentication Section */}
           <section id="auth" className="docs-section">
-            <h2>🔐 Authentication</h2>
+            <h2>Authentication</h2>
             <p>
               All API endpoints require authentication via Supabase JWT tokens. Include the token in the 
               Authorization header of your requests.
@@ -184,7 +183,7 @@ const ApiDocsPage = () => {
 
           {/* Data Models Section */}
           <section id="models" className="docs-section">
-            <h2>🗂️ Data Models</h2>
+            <h2>Data Models</h2>
             
             <div className="model-section">
               <h3>Upload Model</h3>
@@ -265,7 +264,7 @@ const ApiDocsPage = () => {
 
           {/* API Endpoints Section */}
           <section id="endpoints" className="docs-section">
-            <h2>🔗 API Endpoints</h2>
+            <h2>API Endpoints</h2>
             
             <div className="endpoint-section">
               <div className="endpoint-header">
@@ -409,7 +408,7 @@ const ApiDocsPage = () => {
 
           {/* Error Handling Section */}
           <section id="errors" className="docs-section">
-            <h2>⚠️ Error Handling</h2>
+            <h2>Error Handling</h2>
             
             <div className="error-codes-section">
               <h3>HTTP Status Codes</h3>
@@ -472,7 +471,7 @@ const ApiDocsPage = () => {
 
           {/* Examples Section */}
           <section id="examples" className="docs-section">
-            <h2>💡 Examples</h2>
+            <h2>Examples</h2>
             
             <div className="example-section">
               <h3>Upload a File</h3>
@@ -524,7 +523,7 @@ console.log('Upload ID:', result.upload_id);`}</code></pre>
 
           {/* OpenAPI Section */}
           <section id="openapi" className="docs-section">
-            <h2>📄 OpenAPI Specification</h2>
+            <h2>OpenAPI Specification</h2>
             
             <div className="openapi-info">
               <p>

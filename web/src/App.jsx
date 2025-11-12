@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import ApiDocsPage from './pages/ApiDocsPage';
+import TranscriptionPage from './pages/TranscriptionPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           {/* Protected Routes */}
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/api-docs" element={<ApiDocsPage />} />
+          <Route path="/transcription/:filename" element={<TranscriptionPage />} />
           
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/login" replace />} />

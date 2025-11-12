@@ -67,9 +67,10 @@ const DashboardPage = () => {
     }
   };
 
-  const handleDownload = (filename) => {
-    alert(`Downloading: ${filename}`);
-    // Will implement actual download logic later
+  const handleView = (filename) => {
+    // Extract just the filename without extension for URL-safe navigation
+    const urlSafeFilename = encodeURIComponent(filename);
+    navigate(`/transcription/${urlSafeFilename}`);
   };
 
   const handleDragOver = (e) => {
@@ -161,8 +162,8 @@ const DashboardPage = () => {
                   <h3>Team_Meeting_2024-11-10.mp4</h3>
                   <p>Status: Transcript Ready • 45:23 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Team_Meeting_2024-11-10.mp4')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Team_Meeting_2024-11-10.mp4')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -170,8 +171,8 @@ const DashboardPage = () => {
                   <h3>Client_Call_2024-11-09.wav</h3>
                   <p>Status: Transcript Ready • 32:15 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Client_Call_2024-11-09.wav')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Client_Call_2024-11-09.wav')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -179,8 +180,8 @@ const DashboardPage = () => {
                   <h3>Board_Meeting_2024-11-08.mp3</h3>
                   <p>Status: Transcript Ready • 1:23:45 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Board_Meeting_2024-11-08.mp3')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Board_Meeting_2024-11-08.mp3')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -188,8 +189,8 @@ const DashboardPage = () => {
                   <h3>Weekly_Standup_2024-11-07.m4a</h3>
                   <p>Status: Transcript Ready • 28:12 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Weekly_Standup_2024-11-07.m4a')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Weekly_Standup_2024-11-07.m4a')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -197,8 +198,8 @@ const DashboardPage = () => {
                   <h3>Product_Review_2024-11-06.mp4</h3>
                   <p>Status: Transcript Ready • 56:33 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Product_Review_2024-11-06.mp4')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Product_Review_2024-11-06.mp4')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -206,8 +207,8 @@ const DashboardPage = () => {
                   <h3>Interview_Sarah_2024-11-05.wav</h3>
                   <p>Status: Transcript Ready • 41:27 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Interview_Sarah_2024-11-05.wav')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Interview_Sarah_2024-11-05.wav')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -215,8 +216,8 @@ const DashboardPage = () => {
                   <h3>Sales_Pitch_2024-11-04.mp3</h3>
                   <p>Status: Transcript Ready • 37:18 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Sales_Pitch_2024-11-04.mp3')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Sales_Pitch_2024-11-04.mp3')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -224,8 +225,8 @@ const DashboardPage = () => {
                   <h3>Training_Session_2024-11-03.mp4</h3>
                   <p>Status: Transcript Ready • 1:15:22 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Training_Session_2024-11-03.mp4')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Training_Session_2024-11-03.mp4')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -233,8 +234,8 @@ const DashboardPage = () => {
                   <h3>Investor_Call_2024-11-02.wav</h3>
                   <p>Status: Transcript Ready • 52:44 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Investor_Call_2024-11-02.wav')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Investor_Call_2024-11-02.wav')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -242,8 +243,8 @@ const DashboardPage = () => {
                   <h3>Marketing_Strategy_2024-11-01.m4a</h3>
                   <p>Status: Transcript Ready • 43:17 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Marketing_Strategy_2024-11-01.m4a')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Marketing_Strategy_2024-11-01.m4a')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -251,8 +252,8 @@ const DashboardPage = () => {
                   <h3>Customer_Feedback_2024-10-31.mp3</h3>
                   <p>Status: Transcript Ready • 29:55 min</p>
                 </div>
-                <button className="download-btn" onClick={() => handleDownload('Customer_Feedback_2024-10-31.mp3')}>
-                  Download
+                <button className="download-btn" onClick={() => handleView('Customer_Feedback_2024-10-31.mp3')}>
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -261,7 +262,7 @@ const DashboardPage = () => {
                   <p>Status: Transcribing... • 38:42 min</p>
                 </div>
                 <button className="download-btn disabled" disabled>
-                  Download
+                  View
                 </button>
               </div>
               <div className="file-item">
@@ -270,7 +271,7 @@ const DashboardPage = () => {
                   <p>Status: Processing... • 25:33 min</p>
                 </div>
                 <button className="download-btn disabled" disabled>
-                  Download
+                  View
                 </button>
               </div>
             </div>
