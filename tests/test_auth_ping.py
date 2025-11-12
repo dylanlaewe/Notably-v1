@@ -7,6 +7,6 @@ def test_auth_ping_dev_key(client):
     assert body["dev"] is True
 
 def test_auth_ping_missing_token(client):
-    r = client.get("/v1/auth/ping", headers={})  # pass an empty dict
+    r = client.get("/v1/auth/ping", headers={"X-Api-Key": "wrong"}) # pass an empty dict
     assert r.status_code == 401
 
