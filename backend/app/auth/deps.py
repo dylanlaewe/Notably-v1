@@ -7,6 +7,8 @@ from backend.app.config import get_settings
 from backend.app.db import get_session
 from backend.app.auth.jwt_verifier import verify_and_decode
 from backend.app.auth.types import UserContext
+from backend.app.auth.idmap import user_uuid_from_sub
+
 
 
 async def require_user(
@@ -49,6 +51,7 @@ async def require_user(
     email = claims.get("email")
     name = claims.get("name") or (claims.get("user_metadata") or {}).get("full_name")
 
-    # We'll fill user_id after we wire provisioning to your actual models
-    return UserContext(sub=sub, email=email, name=name, user_id=None, is_dev=False)
+    user_uuid = user_uuid_from_sub(sub)
+    return UserContext(sub=sub, email=email, name=name, user_id=user_uuid, is_dev=False)
+
 

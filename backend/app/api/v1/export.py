@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from uuid import UUID
 from ...db import SessionLocal
 from backend.app.auth import require_user, UserContext
 from backend.app.access import assert_user_can_access_meeting
