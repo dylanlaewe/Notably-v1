@@ -67,10 +67,13 @@ jobs:
           PY
 
 
+        # .github/workflows/ci.yml  (or your workflow file)
       - name: Run tests
         env:
+          PYTHONPATH: ${{ github.workspace }}
           DEV_MODE: "true"
-          DEV_API_KEY: "test-api"
+          DEV_API_KEY: "test-api"   # <-- matches tests' X-Api-Key
           NOTABLY_DEV_USER_ID: "11111111-1111-1111-1111-111111111111"
         run: |
           pytest -q
+
