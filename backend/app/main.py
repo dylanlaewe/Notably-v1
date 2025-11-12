@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .auth import require_user
 from backend.app.api.v1.teams import router as teams_router
 from backend.app.api.v1.my import router as my_router
-
+from .api.v1 import auth_routes
 
 
 app = FastAPI(title="Notably API", version="0.0.3")
@@ -59,3 +59,4 @@ app.include_router(tags_router,    dependencies=[Depends(require_user)])
 app.include_router(browse_router,  dependencies=[Depends(require_user)])
 app.include_router(teams_router)
 app.include_router(my_router)
+app.include_router(auth_routes.router)
