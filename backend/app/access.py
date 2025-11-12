@@ -2,8 +2,15 @@
 from __future__ import annotations
 from typing import Optional
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import text, select, literal
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
+
+from backend.app.models import Meeting, TeamMember, Upload
+
+def _parse_uuid(s: str) -> UUID:
+    return UUID(s)
 
 def _table_exists(db: Session, table: str) -> bool:
     row = db.execute(
@@ -93,3 +100,51 @@ def assign_meeting_team_if_empty(db: Session, meeting_id: str, team_id: str) -> 
         {"tid": team_id, "mid": meeting_id},
     )
     db.commit()
+
+async def get_visible_meeting_or_404(db: AsyncSession, user_id: UUID, meeting_id: str) -> Meeting:
+    try:
+        mid = _parse_uuid(meeting_id)
+    except Exception:
+        raise HTTPException(status_code=422, detail="invalid_meeting_id")
+
+    meeting = await db.scalar(select(Meeting).where(Meeting.id == mid))
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="meeting_not_found")
+
+    allowed = await db.scalar(
+        select(literal(True)).select_from(TeamMember).where(
+            TeamMember.team_id == meeting.team_id,
+            TeamMember.user_id == user_id,
+        ).limit(1)
+    )
+    if not allowed:
+        # Invisible across teams
+        raise HTTPException(status_code=404, detail="meeting_not_found")
+
+    return meeting
+
+async def get_visible_upload_or_404(db: AsyncSession, user_id: UUID, upload_id: str) -> Upload:
+    try:
+        uid = _parse_uuid(upload_id)
+    except Exception:
+        raise HTTPException(status_code=422, detail="invalid_upload_id")
+
+    upload = await db.scalar(select(Upload).where(Upload.id == uid))
+    if upload is None:
+        raise HTTPException(status_code=404, detail="upload_not_found")
+
+    # join upload -> meeting -> team_member
+    meeting = await db.scalar(select(Meeting).where(Meeting.id == upload.meeting_id))
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="meeting_not_found")
+
+    allowed = await db.scalar(
+        select(literal(True)).select_from(TeamMember).where(
+            TeamMember.team_id == meeting.team_id,
+            TeamMember.user_id == user_id,
+        ).limit(1)
+    )
+    if not allowed:
+        raise HTTPException(status_code=404, detail="upload_not_found")
+
+    return upload

@@ -22,6 +22,7 @@ from ...export_pdf import render_meeting_pdf
 from backend.app.team_ops import get_or_create_default_team
 from backend.app.access import assign_meeting_team_if_empty
 from backend.app.auth import require_user, UserContext
+from backend.app.access import get_visible_upload_or_404
 
 
 # RQ (optional)
@@ -332,7 +333,12 @@ async def create_upload(
 
 
 @router.get("/uploads/{upload_id}", response_model=UploadStatusResp)
-async def get_upload(upload_id: str, db: Session = Depends(get_session)):
+async def get_upload(
+    upload_id: str,
+    user: UserContext = Depends(require_user), 
+    db: Session = Depends(get_session),
+):
+    _ = get_visible_upload_or_404(db, user.user_id, upload_id)
     # 1) Try DB first
     db_row = db.get(Upload, upload_id)
     if db_row:

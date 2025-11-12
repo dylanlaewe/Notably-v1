@@ -12,6 +12,7 @@ from uuid import UUID
 from ...db import SessionLocal
 from backend.app.auth import require_user, UserContext
 from backend.app.access import assert_user_can_access_meeting
+from backend.app.access import get_visible_meeting_or_404
 
 router = APIRouter(prefix="/v1", tags=["export"])
 
@@ -355,9 +356,8 @@ def export_md(
     meeting_id: str,
     filename: str | None = None,
     user: UserContext = Depends(require_user),
-    db: Session = Depends(get_db),
-):
-    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+    db: Session = Depends(get_db)):
+    _ = get_visible_meeting_or_404(db, user.user_id, meeting_id)
 
     try:
         sid, bullets = _fetch_summary(db, meeting_id)
@@ -377,9 +377,8 @@ def export_pdf(
     meeting_id: str,
     filename: str | None = None,
     user: UserContext = Depends(require_user),
-    db: Session = Depends(get_db),
-):
-    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+    db: Session = Depends(get_db)):
+    _ = get_visible_meeting_or_404(db, user.user_id, meeting_id)
 
     try:
         sid, bullets = _fetch_summary(db, meeting_id)
