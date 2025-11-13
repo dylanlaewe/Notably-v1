@@ -2,8 +2,13 @@
 from __future__ import annotations
 from typing import Optional
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import text, select, literal
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
+
+def _parse_uuid(s: str) -> UUID:
+    return UUID(s)
 
 def _table_exists(db: Session, table: str) -> bool:
     row = db.execute(
@@ -93,3 +98,39 @@ def assign_meeting_team_if_empty(db: Session, meeting_id: str, team_id: str) -> 
         {"tid": team_id, "mid": meeting_id},
     )
     db.commit()
+
+def get_visible_meeting_or_404(db: Session, user_id: str, meeting_id: str) -> dict:
+    """
+    Return minimal meeting data if caller can see it, else 404.
+    Honors your legacy behavior: if team/member tables/columns aren't present, allow.
+    """
+    # if the meeting row doesn't exist at all → 404
+    row = db.execute(
+        text("select id, team_id from meeting where id = :mid limit 1"),
+        {"mid": meeting_id},
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="meeting_not_found")
+
+    # enforce membership only when team_id exists (your existing policy)
+    assert_user_can_access_meeting(db, user_id, meeting_id)
+
+    return {
+        "id": str(row["id"]),
+        "team_id": (str(row["team_id"]) if row["team_id"] else None),
+    }
+
+
+def get_visible_upload_or_404(db: Session, user_id: str, upload_id: str) -> dict:
+    """
+    Load upload and enforce visibility using its meeting_id. 404 if missing/invisible.
+    """
+    u = db.execute(
+        text("select id, meeting_id from upload where id = :uid limit 1"),
+        {"uid": upload_id},
+    ).mappings().first()
+    if not u:
+        raise HTTPException(status_code=404, detail="upload_not_found")
+
+    assert_user_can_access_meeting(db, user_id, u["meeting_id"])
+    return {"id": str(u["id"]), "meeting_id": str(u["meeting_id"])}

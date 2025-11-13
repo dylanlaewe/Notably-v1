@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_, func, case, desc
 from backend.app.auth import require_user, UserContext
 from backend.app.access import assert_user_can_access_meeting
 from ...db import SessionLocal
+from backend.app.access import get_visible_meeting_or_404
 from ...models import (
     Upload,
     Transcript,
@@ -89,7 +90,7 @@ def get_transcript(
     user: UserContext = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+    _ = get_visible_meeting_or_404(db, user.user_id, meeting_id)
 
     try:
         t = _get_latest_transcript_for_meeting(db, meeting_id)
@@ -133,7 +134,7 @@ def get_summary(
     user: UserContext = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    assert_user_can_access_meeting(db, user.user_id, meeting_id)
+    _ = get_visible_meeting_or_404(db, user.user_id, meeting_id)
     try:
         s = _get_latest_summary_for_meeting(db, meeting_id)
         if not s:

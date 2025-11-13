@@ -53,11 +53,14 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
     """
     If NOTABLY_API_KEY is set, require either:
       - Header: X-Api-Key: <key>
-      - Header: Authorization: Bearer <key>
+      - Header: Authorization: Bearer <key>   (non-JWT api key)
 
     Exempts:
       - GET /health
       - All /v1/admin/* endpoints (they use the admin token)
+      - Any request that presents a Bearer token that looks like a JWT
+        (e.g. Authorization: Bearer x.y.z). Those are left for the
+        route-level JWT auth (require_user) to validate.
     """
 
     def __init__(self, app):
@@ -65,6 +68,7 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
         self.required_key = (os.getenv("NOTABLY_API_KEY") or "").strip()
 
     async def dispatch(self, request: Request, call_next):
+        # If no global API key is configured, this middleware is a no-op.
         if not self.required_key:
             return await call_next(request)
 
@@ -75,11 +79,21 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
             # Admin routes are protected by NOTABLY_ADMIN_TOKEN separately
             return await call_next(request)
 
+        auth = request.headers.get("authorization", "")
+
+        # --- NEW: if there's a Bearer token that looks like a JWT, let the
+        # route-level auth (require_user) handle it instead of treating it
+        # as an API key.
+        if auth.lower().startswith("bearer "):
+            token = auth.split(" ", 1)[1].strip()
+            # crude but effective: JWTs are "header.payload.signature"
+            if "." in token:
+                return await call_next(request)
+
+        # Otherwise, enforce NOTABLY_API_KEY via X-Api-Key or Bearer <api-key>
         key = request.headers.get("x-api-key", "").strip()
-        if not key:
-            auth = request.headers.get("authorization", "")
-            if auth.lower().startswith("bearer "):
-                key = auth[7:].strip()
+        if not key and auth.lower().startswith("bearer "):
+            key = auth.split(" ", 1)[1].strip()
 
         if key != self.required_key:
             return JSONResponse(
@@ -89,6 +103,7 @@ class ApiKeyAuthMiddleware(BaseHTTPMiddleware):
             )
 
         return await call_next(request)
+
 
 
 # -------------------------------

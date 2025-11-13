@@ -256,6 +256,9 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
 
             # transcript (stub)
             t = Transcript(upload_id=upload_id, language="en")
+            # NEW: also attach meeting_id if the model supports it
+            if hasattr(t, "meeting_id"):
+                t.meeting_id = meeting_id
             db.add(t)
             db.flush()  # t.id
 
@@ -269,6 +272,7 @@ def process_stub(upload_id: str, meeting_id: str) -> None:
                 db.add(seg)
                 db.flush()
                 seg_id_by_index[i] = seg.id
+
         else:
             # Fetch the transcript created by Whisper (latest for this upload)
             t = (

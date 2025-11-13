@@ -20,8 +20,14 @@ from fastapi import Response
 from fastapi import Query
 from ...export_pdf import render_meeting_pdf
 from backend.app.team_ops import get_or_create_default_team
-from backend.app.access import assign_meeting_team_if_empty
+from backend.app.access import (
+    assert_user_can_access_meeting,
+    assign_meeting_team_if_empty,
+    get_visible_upload_or_404,
+    ensure_meeting_exists,
+)
 from backend.app.auth import require_user, UserContext
+from backend.app.access import get_visible_upload_or_404
 
 
 # RQ (optional)
@@ -332,7 +338,11 @@ async def create_upload(
 
 
 @router.get("/uploads/{upload_id}", response_model=UploadStatusResp)
-async def get_upload(upload_id: str, db: Session = Depends(get_session)):
+async def get_upload(
+    upload_id: str,
+    user: UserContext = Depends(require_user), 
+    db: Session = Depends(get_session),
+):
     # 1) Try DB first
     db_row = db.get(Upload, upload_id)
     if db_row:
@@ -354,6 +364,9 @@ async def get_upload(upload_id: str, db: Session = Depends(get_session)):
     rec = _UPLOADS.get(upload_id)
     if not rec:
         raise HTTPException(status_code=404, detail="Upload not found")
+    if getattr(rec, "meeting_id", None):
+        # verify access to meeting
+        assert_user_can_access_meeting(db, user.user_id, rec.meeting_id)   
     return UploadStatusResp(**rec.model_dump())
 
 
@@ -595,34 +608,45 @@ async def presigned_download(
 
 def _process_stub(upload_id: str, meeting_id: str) -> None:
     """
-    Simulate background processing:
-    - status: queued -> processing -> done
-    - write transcript segments + summary with citations into DB
+    Simulate background processing for dev/tests (no RQ worker):
+
+    - Ensure there's a meeting row for access checks and visibility.
+    - Flip Upload.status: queued -> processing -> done.
+    - Fabricate transcript segments and a summary with citations in the DB.
+
+    This mirrors the behavior of backend.app.tasks.process_stub in a simpler,
+    in-process way so that tests (and dev) can rely on meeting-scoped endpoints
+    like /v1/meetings/{meeting_id}/transcript and /summary.
     """
     db = SessionLocal()
-    u = None
+    u: Upload | None = None
     try:
-        # mark processing
+        # 1) Mark upload as processing
         u = db.get(Upload, upload_id)
         if not u:
             db.close()
             return
+
         u.status = "processing"
         db.add(u)
         db.commit()
 
-        # small delay so you can see the transition in /status
+        # 2) Ensure a meeting row exists (needed for get_visible_meeting_or_404)
+        ensure_meeting_exists(db, meeting_id)
+
+        # Small delay so you can see the transition in /uploads/{id}
         sleep(1.0)
 
-        # fabricate result
+        # 3) Fabricate stub transcript data
         segs, bullets, actions = _make_stub_result()
 
-        # transcript
+        # Transcript row
         t = Transcript(upload_id=upload_id, language="en")
         db.add(t)
         db.flush()  # t.id
 
-        seg_id_by_index = {}
+        # Transcript segments
+        seg_id_by_index: dict[int, int] = {}
         for i, s in enumerate(segs, start=1):
             seg = TranscriptSegment(
                 transcript_id=t.id,
@@ -634,7 +658,7 @@ def _process_stub(upload_id: str, meeting_id: str) -> None:
             db.flush()
             seg_id_by_index[i] = seg.id
 
-        # summary + bullets + citations
+        # 4) Summary + bullets + citations
         summary = Summary(meeting_id=meeting_id)
         db.add(summary)
         db.flush()
@@ -643,16 +667,23 @@ def _process_stub(upload_id: str, meeting_id: str) -> None:
             b_row = ORMSummaryBullet(summary_id=summary.id, text=b["text"])
             db.add(b_row)
             db.flush()
+
             for c in b.get("citations", []):
                 idx = c["segment_id"]
                 real_seg_id = seg_id_by_index.get(idx)
                 if real_seg_id is not None:
-                    db.add(ORMBulletCitation(summary_bullet_id=b_row.id, segment_id=real_seg_id))
+                    db.add(
+                        ORMBulletCitation(
+                            summary_bullet_id=b_row.id,
+                            segment_id=real_seg_id,
+                        )
+                    )
 
-        # done
+        # 5) Mark upload as done
         u.status = "done"
         db.add(u)
         db.commit()
+
     except Exception as e:
         if u:
             u.status = "failed"
@@ -662,4 +693,3 @@ def _process_stub(upload_id: str, meeting_id: str) -> None:
         raise
     finally:
         db.close()
-
