@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 import notablyLogo from '../assets/notably logo.png';
 import './SignupPage.css';
 
 function SignupPage() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   
   // Form state
   const [fullName, setFullName] = useState('');
@@ -12,6 +14,38 @@ function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Default profile settings for new accounts
+  const createDefaultProfile = (userData) => {
+    const defaultProfile = {
+      // Basic account info
+      fullName: userData.fullName,
+      email: userData.email,
+      memberSince: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      totalNotes: '0',
+      storageUsed: '0 MB / 10 GB',
+      
+      // General preferences
+      preferences: {
+        language: 'English',
+        notifications: true,
+        theme: theme || 'dark' // Use current theme or default to dark
+      },
+      
+      // Account settings
+      accountSettings: {
+        emailNotifications: true,
+        twoFactorAuth: false,
+        dataBackup: true
+      }
+    };
+    
+    // Save to localStorage (in a real app, this would be saved to database)
+    localStorage.setItem('notably-profile', JSON.stringify(defaultProfile));
+    localStorage.setItem('notably-preferences', JSON.stringify(defaultProfile.preferences));
+    
+    return defaultProfile;
+  };
 
   // Handle form submission
   const handleSubmit = async (e) => {
@@ -37,10 +71,30 @@ function SignupPage() {
       return;
     }
 
-    // Simulate account creation
-    setTimeout(() => {
-      navigate('/dashboard');
-    }, 1000);
+    try {
+      // Create user data object
+      const userData = {
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password // In real app, this would be hashed
+      };
+
+      // Create default profile settings for the new account
+      const newProfile = createDefaultProfile(userData);
+      
+      console.log('Account created with profile:', newProfile);
+
+      // Simulate account creation API call
+      setTimeout(() => {
+        // Navigate to dashboard with new profile
+        navigate('/dashboard');
+      }, 1000);
+      
+    } catch (error) {
+      setLoading(false);
+      alert('Error creating account. Please try again.');
+      console.error('Account creation error:', error);
+    }
   };
 
   // Navigate to login page

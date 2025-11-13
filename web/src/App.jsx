@@ -6,6 +6,8 @@ import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import ApiDocsPage from './pages/ApiDocsPage';
 import TranscriptionPage from './pages/TranscriptionPage';
+import FAQPage from './pages/FAQPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -18,7 +20,9 @@ function App() {
           
           {/* Protected Routes */}
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/api-docs" element={<ApiDocsPage />} />
+          <Route path="/faq" element={<FAQPage />} />
           <Route path="/transcription/:filename" element={<TranscriptionPage />} />
           
           {/* Default redirect */}
