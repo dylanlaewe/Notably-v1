@@ -7,14 +7,17 @@ class Settings:
     DEV_MODE: bool = os.getenv("DEV_MODE", "false").lower() == "true"
 
     # ---- Dev key path (local only)
-    DEV_API_KEY: str | None = os.getenv("DEV_API_KEY")
+    DEV_API_KEY: str | None = os.getenv("DEV_API_KEY") or os.getenv("NOTABLY_DEV_API_KEY")
     NOTABLY_DEV_USER_ID: str | None = os.getenv("NOTABLY_DEV_USER_ID")  # UUID string
+    NOTABLY_ADMIN_TOKEN: str | None = os.getenv("NOTABLY_ADMIN_TOKEN")
 
     # ---- JWT / OIDC (for Supabase or any OIDC issuer)
     JWT_ISSUER: str | None = os.getenv("JWT_ISSUER")
     JWT_AUDIENCE: str | None = os.getenv("JWT_AUDIENCE")
     JWKS_URL: str | None = os.getenv("JWKS_URL")
     JWT_LEEWAY_SECONDS: int = int(os.getenv("JWT_LEEWAY_SECONDS", "60"))
+    JWT_SECRET: str | None = os.getenv("JWT_SECRET") or os.getenv("SUPABASE_JWT_SECRET")
+
 
 @lru_cache
 def get_settings() -> Settings:

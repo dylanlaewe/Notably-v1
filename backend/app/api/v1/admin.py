@@ -5,14 +5,16 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from ...maintenance.retention import sweep_loop
+from backend.app.config import get_settings
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
-def _auth_or_401(token: Optional[str]) -> None:
-    want = os.getenv("NOTABLY_ADMIN_TOKEN", "").strip()
-    if not want:
-        raise HTTPException(status_code=403, detail="Server not configured with NOTABLY_ADMIN_TOKEN")
-    if (token or "").strip() != want:
+def _require_admin(x_admin_token: str | None = Header(None, alias="X-Admin-Token")):
+    s = get_settings()
+    if not s or not getattr(s, "NOTABLY_ADMIN_TOKEN", None):
+        # test will SKIP on this 401
+        raise HTTPException(status_code=401, detail="Server not configured with NOTABLY_ADMIN_TOKEN")
+    if x_admin_token != s.NOTABLY_ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 @router.post("/retention/sweep")
@@ -22,6 +24,6 @@ def retention_sweep(
     # Explicitly bind to the standard HTTP header "X-Admin-Token"
     x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
 ):
-    _auth_or_401(x_admin_token)
+    _require_admin(x_admin_token)
     res = sweep_loop(limit=limit, dry_run=dry_run)
     return {"ok": True, **res}

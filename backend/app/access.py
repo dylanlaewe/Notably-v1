@@ -7,8 +7,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from backend.app.models import Meeting, TeamMember, Upload
-
 def _parse_uuid(s: str) -> UUID:
     return UUID(s)
 
@@ -101,50 +99,38 @@ def assign_meeting_team_if_empty(db: Session, meeting_id: str, team_id: str) -> 
     )
     db.commit()
 
-async def get_visible_meeting_or_404(db: AsyncSession, user_id: UUID, meeting_id: str) -> Meeting:
-    try:
-        mid = _parse_uuid(meeting_id)
-    except Exception:
-        raise HTTPException(status_code=422, detail="invalid_meeting_id")
-
-    meeting = await db.scalar(select(Meeting).where(Meeting.id == mid))
-    if meeting is None:
+def get_visible_meeting_or_404(db: Session, user_id: str, meeting_id: str) -> dict:
+    """
+    Return minimal meeting data if caller can see it, else 404.
+    Honors your legacy behavior: if team/member tables/columns aren't present, allow.
+    """
+    # if the meeting row doesn't exist at all → 404
+    row = db.execute(
+        text("select id, team_id from meeting where id = :mid limit 1"),
+        {"mid": meeting_id},
+    ).mappings().first()
+    if not row:
         raise HTTPException(status_code=404, detail="meeting_not_found")
 
-    allowed = await db.scalar(
-        select(literal(True)).select_from(TeamMember).where(
-            TeamMember.team_id == meeting.team_id,
-            TeamMember.user_id == user_id,
-        ).limit(1)
-    )
-    if not allowed:
-        # Invisible across teams
-        raise HTTPException(status_code=404, detail="meeting_not_found")
+    # enforce membership only when team_id exists (your existing policy)
+    assert_user_can_access_meeting(db, user_id, meeting_id)
 
-    return meeting
+    return {
+        "id": str(row["id"]),
+        "team_id": (str(row["team_id"]) if row["team_id"] else None),
+    }
 
-async def get_visible_upload_or_404(db: AsyncSession, user_id: UUID, upload_id: str) -> Upload:
-    try:
-        uid = _parse_uuid(upload_id)
-    except Exception:
-        raise HTTPException(status_code=422, detail="invalid_upload_id")
 
-    upload = await db.scalar(select(Upload).where(Upload.id == uid))
-    if upload is None:
+def get_visible_upload_or_404(db: Session, user_id: str, upload_id: str) -> dict:
+    """
+    Load upload and enforce visibility using its meeting_id. 404 if missing/invisible.
+    """
+    u = db.execute(
+        text("select id, meeting_id from upload where id = :uid limit 1"),
+        {"uid": upload_id},
+    ).mappings().first()
+    if not u:
         raise HTTPException(status_code=404, detail="upload_not_found")
 
-    # join upload -> meeting -> team_member
-    meeting = await db.scalar(select(Meeting).where(Meeting.id == upload.meeting_id))
-    if meeting is None:
-        raise HTTPException(status_code=404, detail="meeting_not_found")
-
-    allowed = await db.scalar(
-        select(literal(True)).select_from(TeamMember).where(
-            TeamMember.team_id == meeting.team_id,
-            TeamMember.user_id == user_id,
-        ).limit(1)
-    )
-    if not allowed:
-        raise HTTPException(status_code=404, detail="upload_not_found")
-
-    return upload
+    assert_user_can_access_meeting(db, user_id, u["meeting_id"])
+    return {"id": str(u["id"]), "meeting_id": str(u["meeting_id"])}
