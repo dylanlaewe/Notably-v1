@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 from typing import Optional, List, Dict, Any, Iterable, Set
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, text
 from uuid import uuid4
+
+from backend.app.api.v1.teams import get_db
 from ...db import SessionLocal
 from ...models import Upload, Summary
 from pydantic import BaseModel
 from backend.app.db import get_session
 from backend.app.auth import require_user, UserContext
-from backend.app.access import ensure_meeting_exists, assign_meeting_team_if_empty
+from backend.app.access import assert_user_can_access_meeting, ensure_meeting_exists, assign_meeting_team_if_empty, get_visible_meeting_or_404
 from backend.app.team_ops import get_or_create_default_team
 
 import os
@@ -123,139 +125,70 @@ def _meeting_ids_for_tags(
     return {str(r["target_id"]) for r in rows}
 
 
+
 @router.get("/meetings")
 def list_meetings(
-    q: Optional[str] = Query(None, description="Filter by meeting_id substring"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    order: str = Query("last_upload_at_desc"),  # validated below
-    # NEW: tag filters
-    tag_id: Optional[List[str]] = Query(None, description="Repeatable: tag UUID to filter by"),
-    tag_name: Optional[List[str]] = Query(None, description="Repeatable: tag name to filter by (case-insensitive)"),
-    tag_mode: str = Query("any", description="Tag match mode: 'any' or 'all'"),
+    limit: int = 50,
+    offset: int = 0,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_session),
 ):
     """
-    List meetings with aggregates:
-      - meeting_id
-      - first_upload_at / last_upload_at (ISO 8601 strings)
-      - total_duration_sec (sum of upload.duration_sec)
-      - upload_count
-      - has_summary
-
-    Filters:
-      - q: substring on meeting_id
-      - tag_id / tag_name (repeatable); tag_mode = any|all
-    Sorted by last_upload_at desc by default.
+    List meetings visible to the current user.
+    Adds `latest_upload_filename` so the UI can show a human label.
     """
-    db: Session = SessionLocal()
-    try:
-        # Validate order + tag_mode
-        allowed_order = {"last_upload_at_desc", "last_upload_at_asc"}
-        if order not in allowed_order:
-            order = "last_upload_at_desc"
-        tag_mode = tag_mode.lower()
-        if tag_mode not in {"any", "all"}:
-            tag_mode = "any"
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
 
-        # Resolve tag ids (by id and/or name)
-        resolved_tag_ids = _expand_tag_ids(db, tag_id, tag_name)
+    # Recent meetings; we filter by access in Python.
+    rows = db.execute(
+        text(
+            """
+            select
+              m.id,
+              m.created_at,
+              (
+                select u.filename
+                from upload u
+                where u.meeting_id = m.id
+                order by u.created_at desc
+                limit 1
+              ) as latest_upload_filename
+            from meeting m
+            order by m.created_at desc
+            limit :limit offset :offset
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).mappings().all()
 
-        # If tag filters are present, compute allowed meeting_ids upfront
-        allowed_meeting_ids: Optional[Set[str]] = None
-        if resolved_tag_ids:
-            allowed_meeting_ids = _meeting_ids_for_tags(db, resolved_tag_ids, tag_mode)
-            if not allowed_meeting_ids:
-                # No matches; short-circuit empty response
-                _log(f"list_meetings — tags={resolved_tag_ids} mode={tag_mode} → 0 matches")
-                return {"total": 0, "limit": limit, "offset": offset, "order": order, "q": q, "items": []}
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        mid = str(row["id"])
 
-        # Total distinct meetings (for pagination UI)
-        total_q = db.query(func.count(func.distinct(Upload.meeting_id)))
-        if q:
-            total_q = total_q.filter(Upload.meeting_id.ilike(f"%{q}%"))
-        if allowed_meeting_ids is not None:
-            total_q = total_q.filter(Upload.meeting_id.in_(list(allowed_meeting_ids)))
-        total_count = int(total_q.scalar() or 0)
+        # re-use your existing access guard
+        try:
+            assert_user_can_access_meeting(db, user.user_id, mid)
+        except HTTPException:
+            continue
 
-        # Aggregates per meeting
-        agg = (
-            db.query(
-                Upload.meeting_id.label("meeting_id"),
-                func.min(Upload.created_at).label("first_upload_at"),
-                func.max(Upload.created_at).label("last_upload_at"),
-                func.coalesce(func.sum(func.coalesce(Upload.duration_sec, 0.0)), 0.0).label("total_duration_sec"),
-                func.count(Upload.id).label("upload_count"),
-            )
-        )
-        if q:
-            agg = agg.filter(Upload.meeting_id.ilike(f"%{q}%"))
-        if allowed_meeting_ids is not None:
-            agg = agg.filter(Upload.meeting_id.in_(list(allowed_meeting_ids)))
-        agg = agg.group_by(Upload.meeting_id).subquery(name="agg")
+        created_at = row.get("created_at")
 
-        # Distinct meetings that have a summary
-        summ_meetings = db.query(Summary.meeting_id.label("meeting_id")).distinct().subquery(name="summ_meetings")
-
-        # has_summary flag
-        has_summary_col = case(
-            (summ_meetings.c.meeting_id.isnot(None), True),
-            else_=False,
-        ).label("has_summary")
-
-        final_q = (
-            db.query(
-                agg.c.meeting_id,
-                agg.c.first_upload_at,
-                agg.c.last_upload_at,
-                agg.c.total_duration_sec,
-                agg.c.upload_count,
-                has_summary_col,
-            )
-            .outerjoin(summ_meetings, summ_meetings.c.meeting_id == agg.c.meeting_id)
+        items.append(
+            {
+                "id": mid,
+                "created_at": created_at.isoformat() if created_at else None,
+                "latest_upload_filename": row.get("latest_upload_filename"),
+            }
         )
 
-        # Sort
-        if order == "last_upload_at_asc":
-            final_q = final_q.order_by(agg.c.last_upload_at.asc())
-        else:
-            final_q = final_q.order_by(agg.c.last_upload_at.desc())
+    return {
+        "total": len(items),
+        "limit": limit,
+        "offset": offset,
+        "items": items,
+    }
 
-        # Page
-        rows = final_q.offset(offset).limit(limit).all()
-
-        items: List[Dict[str, Any]] = []
-        for r in rows:
-            first_iso = r.first_upload_at.isoformat() if r.first_upload_at else None
-            last_iso  = r.last_upload_at.isoformat() if r.last_upload_at else None
-            items.append(
-                {
-                    "meeting_id": r.meeting_id,
-                    "first_upload_at": first_iso,
-                    "last_upload_at": last_iso,
-                    "upload_count": int(r.upload_count or 0),
-                    "total_duration_sec": float(r.total_duration_sec or 0.0),
-                    "total_duration_str": _format_time_s(r.total_duration_sec or 0.0),
-                    "has_summary": bool(r.has_summary),
-                }
-            )
-
-        _log(
-            f"listed {len(items)}/{total_count} meetings "
-            f"(q={q!r}, tags={resolved_tag_ids or []}, mode={tag_mode}, order={order}, limit={limit}, offset={offset})"
-        )
-        return {
-            "total": total_count,
-            "limit": limit,
-            "offset": offset,
-            "order": order,
-            "q": q,
-            "tag_id": tag_id,
-            "tag_name": tag_name,
-            "tag_mode": tag_mode,
-            "items": items,
-        }
-    finally:
-        db.close()
 
 class MeetingCreateResp(BaseModel):
     id: str
@@ -284,3 +217,28 @@ def create_meeting(
     assign_meeting_team_if_empty(db, meeting_id, team_id)
 
     return MeetingCreateResp(id=meeting_id)
+
+@router.delete("/meetings/{meeting_id}", status_code=204)
+def delete_meeting(
+    meeting_id: str,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Hard-delete a meeting the user can see.
+
+    Assumes your foreign keys (upload, transcript, summary, actions, etc.)
+    either have ON DELETE CASCADE or are otherwise safe to remove.
+    """
+    # Enforce access (team membership, etc.)
+    _ = get_visible_meeting_or_404(db, user.user_id, meeting_id)
+
+    # Delete the meeting row itself
+    db.execute(
+        text("DELETE FROM meeting WHERE id = :mid"),
+        {"mid": meeting_id},
+    )
+    db.commit()
+
+    # 204 No Content
+    return Response(status_code=204)

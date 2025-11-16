@@ -1,7 +1,7 @@
 // web/src/pages/MeetingDetailPage.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { apiFetch } from "../lib/apiClient";
+import { apiFetch, getApiBaseUrl } from "../lib/apiClient";
 import { clearAccessToken } from "../lib/authToken";
 
 export default function MeetingDetailPage() {
@@ -32,6 +32,21 @@ export default function MeetingDetailPage() {
   const [searchStatus, setSearchStatus] = useState("idle"); // "idle" | "loading" | "ok" | "error"
   const [searchError, setSearchError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
+
+
+    function handleDownloadPdf() {
+    if (!meetingId) return;
+    const base = getApiBaseUrl();
+    const url = `${base}/v1/exports/pdf?meeting_id=${meetingId}`;
+    window.open(url, "_blank");
+  }
+
+    function handleDownloadMarkdown() {
+    if (!meetingId) return;
+    const base = getApiBaseUrl();
+    const url = `${base}/v1/exports/markdown?meeting_id=${meetingId}`;
+    window.open(url, "_blank");
+  }
 
   // ---- Actions: create ----
   async function handleCreateAction(e) {
@@ -201,6 +216,53 @@ export default function MeetingDetailPage() {
       setSearchStatus("error");
     }
   }
+  
+  async function downloadExport(kind) {
+    if (!meetingId) return;
+
+    const ext = kind === "pdf" ? "pdf" : "md";
+    const path =
+      kind === "pdf"
+        ? `/v1/exports/pdf?meeting_id=${meetingId}`
+        : `/v1/exports/markdown?meeting_id=${meetingId}`;
+
+    try {
+      // Use apiFetch so Authorization: Bearer <token> is attached
+      const resp = await apiFetch(path, { method: "GET" });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(`Failed to download ${ext}:`, resp.status, text);
+        alert(`Failed to download ${ext} (HTTP ${resp.status}).`);
+        return;
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `meeting-${meetingId}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(`Error downloading ${ext}`, err);
+      alert(`Error downloading ${ext}: ${err?.message || err}`);
+    }
+  }
+  
+  function handleDownloadPdf() {
+    downloadExport("pdf");
+  }
+
+  function handleDownloadMarkdown() {
+    downloadExport("md");
+  }
+
+
 
 
   // ---- Initial load: transcript, summary, actions ----
@@ -403,6 +465,48 @@ export default function MeetingDetailPage() {
           >
             id: <code>{meetingId}</code>
           </div>
+          
+          <div
+            style={{
+              marginTop: "0.75rem",
+              display: "flex",
+              gap: "0.5rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              style={{
+                padding: "0.3rem 0.8rem",
+                borderRadius: "999px",
+                border: "1px solid #4b5563",
+                background: "transparent",
+                color: "#e5e7eb",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+              }}
+            >
+              Download PDF
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadMarkdown}
+              style={{
+                padding: "0.3rem 0.8rem",
+                borderRadius: "999px",
+                border: "1px solid #4b5563",
+                background: "transparent",
+                color: "#e5e7eb",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+              }}
+            >
+              Export .md
+            </button>
+          </div>
+
         </section>
 
         {/* Error */}

@@ -6,10 +6,11 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, case, desc
+from sqlalchemy import and_, or_, func, case, desc, text
 from backend.app.auth import require_user, UserContext
 from backend.app.access import assert_user_can_access_meeting
 from ...db import SessionLocal
+from backend.app.api.v1.teams import get_db
 from backend.app.access import get_visible_meeting_or_404
 from ...models import (
     Upload,
