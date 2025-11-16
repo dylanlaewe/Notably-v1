@@ -15,6 +15,13 @@ export default function MeetingDetailPage() {
   const [transcript, setTranscript] = useState(null); // { items: [...] } or null
   const [summary, setSummary] = useState(null);       // { bullets: [...] } or null
 
+  // Audio / meeting name
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioStatus, setAudioStatus] = useState("idle"); // "idle" | "loading" | "ready" | "error"
+  const [audioError, setAudioError] = useState("");
+  const [audioFilename, setAudioFilename] = useState("");
+  const [meetingName, setMeetingName] = useState("");
+
   // Actions state
   const [actions, setActions] = useState([]);
   const [actionsStatus, setActionsStatus] = useState("idle"); // "idle" | "loading" | "ok" | "error"
@@ -370,7 +377,112 @@ export default function MeetingDetailPage() {
     };
   }, [meetingId, navigate]);
 
+
+    // ---- Load latest audio for this meeting ----
+  useEffect(() => {
+    if (!meetingId) return;
+    let cancelled = false;
+
+    async function loadAudio() {
+      setAudioStatus("loading");
+      setAudioError("");
+      setAudioUrl(null);
+      setAudioFilename("");
+
+      try {
+        // 1) Get latest upload for this meeting
+        const listUrl = `/v1/uploads?meeting_id=${encodeURIComponent(
+          meetingId
+        )}&limit=1`;
+
+        const listRes = await apiFetch(listUrl);
+
+        if (listRes.status === 401) {
+          clearAccessToken();
+          if (!cancelled) {
+            navigate("/login", { replace: true });
+          }
+          return;
+        }
+
+        if (!listRes.ok) {
+          const text = await listRes.text();
+          throw new Error(text || `Uploads HTTP ${listRes.status}`);
+        }
+
+        const uploadsJson = await listRes.json();
+        if (cancelled) return;
+
+        const uploads = Array.isArray(uploadsJson) ? uploadsJson : [];
+        if (uploads.length === 0) {
+          // No recording for this meeting → no player, but not an error
+          setAudioStatus("idle");
+          return;
+        }
+
+        const upload = uploads[0]; // list_uploads is ordered newest-first
+
+        // 2) Get a presigned download URL for the original audio
+        const dlUrl = `/v1/uploads/${encodeURIComponent(
+          upload.id
+        )}/download?kind=original&ttl=3600&filename=${encodeURIComponent(
+          upload.filename || "audio"
+        )}`;
+
+        const dlRes = await apiFetch(dlUrl);
+
+        if (dlRes.status === 401) {
+          clearAccessToken();
+          if (!cancelled) {
+            navigate("/login", { replace: true });
+          }
+          return;
+        }
+
+        if (!dlRes.ok) {
+          const text = await dlRes.text();
+          throw new Error(text || `Download HTTP ${dlRes.status}`);
+        }
+
+        const dlJson = await dlRes.json();
+        if (cancelled) return;
+
+        const url = dlJson?.url;
+        if (!url) {
+          throw new Error("Missing presigned URL");
+        }
+
+        const rawFilename = upload.filename || "";
+        const baseName = rawFilename
+          ? rawFilename.replace(/\.[^/.]+$/, "")
+          : "";
+
+        setAudioUrl(url);
+        setAudioFilename(rawFilename);
+        if (baseName) {
+          setMeetingName(baseName);
+        }
+        setAudioStatus("ready");
+      } catch (err) {
+        console.error("Failed to load audio URL", err);
+        if (cancelled) return;
+        setAudioStatus("error");
+        setAudioError(
+          err instanceof Error ? err.message : "Failed to load audio"
+        );
+      }
+    }
+
+    loadAudio();
+    return () => {
+      cancelled = true;
+    };
+  }, [meetingId, navigate]);
+
+
   const idShort = meetingId ? String(meetingId).slice(0, 8) : "";
+  const displayMeetingName =
+    meetingName || (idShort ? `Meeting ${idShort}` : "Meeting");
 
   return (
     <div
@@ -454,7 +566,7 @@ export default function MeetingDetailPage() {
             Meeting
           </div>
           <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
-            {`Meeting ${idShort || ""}`}
+            {displayMeetingName}
           </div>
           <div
             style={{
@@ -465,7 +577,53 @@ export default function MeetingDetailPage() {
           >
             id: <code>{meetingId}</code>
           </div>
-          
+
+          {/* Audio player */}
+          {audioStatus === "ready" && audioUrl && (
+            <div
+              style={{
+                marginTop: "0.75rem",
+                padding: "0.5rem",
+                borderRadius: "0.75rem",
+                background: "#020617",
+                border: "1px solid #1f2937",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#9ca3af",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                Recording{audioFilename ? ` · ${audioFilename}` : ""}
+              </div>
+              <audio controls src={audioUrl} style={{ width: "100%" }} />
+            </div>
+          )}
+          {audioStatus === "loading" && (
+            <div
+              style={{
+                marginTop: "0.75rem",
+                fontSize: "0.8rem",
+                color: "#9ca3af",
+              }}
+            >
+              Loading recording…
+            </div>
+          )}
+          {audioStatus === "error" && audioError && (
+            <div
+              style={{
+                marginTop: "0.75rem",
+                fontSize: "0.75rem",
+                color: "#fecaca",
+              }}
+            >
+              Couldn&apos;t load recording: {audioError}
+            </div>
+          )}
+
           <div
             style={{
               marginTop: "0.75rem",
@@ -489,7 +647,6 @@ export default function MeetingDetailPage() {
             >
               Download PDF
             </button>
-
             <button
               type="button"
               onClick={handleDownloadMarkdown}
@@ -506,6 +663,7 @@ export default function MeetingDetailPage() {
               Export .md
             </button>
           </div>
+
 
         </section>
 

@@ -128,12 +128,64 @@ export default function DashboardPage() {
           }
 
           items = items || [];
-          setMeetings(items);
+
+          // 🟢 Try to enrich each meeting with its latest upload filename via /v1/uploads
+          let enrichedItems = items;
+          try {
+            const uRes = await apiFetch("/v1/uploads?limit=500");
+            if (uRes.ok) {
+              const uploadBody = await uRes.json();
+              const uploads = Array.isArray(uploadBody) ? uploadBody : [];
+
+              // /v1/uploads is ordered by Upload.created_at DESC → first per meeting is latest
+              const latestByMeeting = new Map();
+              for (const u of uploads) {
+                const mid =
+                  u.meeting_id ||
+                  u.meetingId ||
+                  u.meeting ||
+                  null;
+                if (!mid) continue;
+                const key = String(mid);
+                if (!latestByMeeting.has(key)) {
+                  latestByMeeting.set(key, u);
+                }
+              }
+
+              enrichedItems = items.map((m) => {
+                const mid =
+                  m.id ||
+                  m.meeting_id ||
+                  m.meetingId ||
+                  m.uuid ||
+                  null;
+                if (!mid) return m;
+
+                const u = latestByMeeting.get(String(mid));
+                if (!u) return m;
+
+                return {
+                  ...m,
+                  latest_upload_filename:
+                    u.filename || m.latest_upload_filename,
+                  created_at:
+                    m.created_at ||
+                    m.createdAt ||
+                    u.created_at ||
+                    null,
+                };
+              });
+            }
+          } catch (e) {
+            console.warn("optional /v1/uploads enrich failed:", e);
+          }
+
+          setMeetings(enrichedItems);
           setMeetingsStatus("ok");
 
-          // Default the uploadMeetingId to first meeting
-          if (!uploadMeetingId && items.length > 0) {
-            const first = items[0];
+          // Default the uploadMeetingId to first meeting (use enrichedItems)
+          if (!uploadMeetingId && enrichedItems.length > 0) {
+            const first = enrichedItems[0];
             const id =
               first.id ||
               first.meeting_id ||
@@ -145,6 +197,7 @@ export default function DashboardPage() {
             }
           }
         }
+
       } catch (err) {
         console.error("meetings load failed:", err);
         if (!cancelled) {
