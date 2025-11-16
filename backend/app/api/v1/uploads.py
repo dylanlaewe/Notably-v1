@@ -27,7 +27,6 @@ from backend.app.access import (
     ensure_meeting_exists,
 )
 from backend.app.auth import require_user, UserContext
-from backend.app.access import get_visible_upload_or_404
 
 
 # RQ (optional)
@@ -286,6 +285,7 @@ async def create_upload(
         raise
 
     # Ensure the meeting is assigned to caller's team (idempotent)
+    ensure_meeting_exists(db, meeting_id)
     team_id = get_or_create_default_team(db, user.user_id)
     assign_meeting_team_if_empty(db, meeting_id, team_id)
 

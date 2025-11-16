@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from typing import Optional, List, Dict, Any, Iterable, Set
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, text
-
+from uuid import uuid4
 from ...db import SessionLocal
 from ...models import Upload, Summary
+from pydantic import BaseModel
+from backend.app.db import get_session
+from backend.app.auth import require_user, UserContext
+from backend.app.access import ensure_meeting_exists, assign_meeting_team_if_empty
+from backend.app.team_ops import get_or_create_default_team
 
 import os
 
@@ -251,3 +256,31 @@ def list_meetings(
         }
     finally:
         db.close()
+
+class MeetingCreateResp(BaseModel):
+    id: str
+
+
+@router.post("/meetings", response_model=MeetingCreateResp)
+def create_meeting(
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_session),
+):
+    """
+    Create a new meeting ID for the current user/team and return it.
+
+    For now we keep this super simple:
+      - generate a UUID meeting_id
+      - ensure a meeting row exists
+      - attach it to the caller's default team
+    """
+    meeting_id = str(uuid4())
+
+    # Create row if missing (helper knows how to do the minimal insert)
+    ensure_meeting_exists(db, meeting_id)
+
+    # Attach to user's default team (idempotent)
+    team_id = get_or_create_default_team(db, user.user_id)
+    assign_meeting_team_if_empty(db, meeting_id, team_id)
+
+    return MeetingCreateResp(id=meeting_id)

@@ -1,447 +1,1038 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext';
-import './DashboardPage.css';
-import notablyLogo from '../assets/notably logo.png';
+// web/src/pages/DashboardPage.jsx
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiFetch } from "../lib/apiClient";
+import { clearAccessToken } from "../lib/authToken";
 
-const DashboardPage = () => {
+export default function DashboardPage() {
   const navigate = useNavigate();
-  const { theme, setLightTheme, setDarkTheme, isLight } = useTheme();
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [showGeneralModal, setShowGeneralModal] = useState(false);
-  const [showMenuDropdown, setShowMenuDropdown] = useState(false);
-  
-  // Load saved preferences or use defaults
-  const [preferences, setPreferences] = useState(() => {
-    const savedPreferences = localStorage.getItem('notably-preferences');
-    return savedPreferences ? JSON.parse(savedPreferences) : {
-      language: 'English',
-      notifications: true
-    };
-  });
+
+  // Auth ping
+  const [status, setStatus] = useState("loading"); // "loading" | "ok" | "error"
+  const [user, setUser] = useState(null);
+  const [error, setError] = useState("");
+  const [createStatus, setCreateStatus] = useState("idle");
+  const [createError, setCreateError] = useState(null);
+
+  // Meetings list
+  const [meetingsStatus, setMeetingsStatus] = useState("idle"); // "idle" | "loading" | "ok" | "error"
+  const [meetings, setMeetings] = useState([]);
+  const [meetingsError, setMeetingsError] = useState("");
+
+  // Upload form
+  const [uploadMeetingId, setUploadMeetingId] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadStatus, setUploadStatus] = useState("idle"); // "idle" | "uploading" | "queued" | "error"
+  const [uploadError, setUploadError] = useState("");
+  const [uploadInfo, setUploadInfo] = useState(null); // last response from POST /v1/uploads
+
+  // Latest upload status (for polling)
+  const [lastUploadId, setLastUploadId] = useState(null);
+  const [lastUploadStatus, setLastUploadStatus] = useState(null); // queued | processing | done | failed
+  const [lastUploadDetail, setLastUploadDetail] = useState(null);
+  const [lastUploadPollError, setLastUploadPollError] = useState("");
 
 
+  // ------------------------
+  // Initial load: auth ping + meetings
+  // ------------------------
+  useEffect(() => {
+    let cancelled = false;
 
-  const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      // Will implement logout logic later
-      navigate('/login');
-    }
-  };
+    async function loadAll() {
+      setStatus("loading");
+      setError("");
 
-    const navigateTo = (page) => {
-    if (page === 'settings') {
-      navigate('/settings');
-    } else if (page === 'api') {
-      navigate('/api-docs');
-    } else if (page === 'faq') {
-      navigate('/faq');
-    } else if (page === 'preferences') {
-      setShowGeneralModal(true);
-    } else {
-      alert(`Navigating to: ${page}`);
-    }
-    setShowMenuDropdown(false);
-  };
+      // 1) Auth ping
+      try {
+        const res = await apiFetch("/v1/auth/ping");
 
-  const handleMenuClick = () => {
-    console.log('Menu clicked - toggling dropdown');
-    setShowMenuDropdown(!showMenuDropdown);
-  };
-
-  // Close dropdown when clicking outside
-  const handleOutsideClick = () => {
-    setShowMenuDropdown(false);
-  };
-
-  const closeModal = () => {
-    setShowGeneralModal(false);
-  };
-
-  const handlePreferenceChange = (key, value) => {
-    if (key === 'theme') {
-      // Use theme context functions
-      if (value === 'light') {
-        setLightTheme();
-      } else {
-        setDarkTheme();
-      }
-      // Update preferences with theme change
-      const updatedPreferences = {
-        ...preferences,
-        [key]: value
-      };
-      setPreferences(updatedPreferences);
-      localStorage.setItem('notably-preferences', JSON.stringify(updatedPreferences));
-    } else {
-      const updatedPreferences = {
-        ...preferences,
-        [key]: value
-      };
-      setPreferences(updatedPreferences);
-      localStorage.setItem('notably-preferences', JSON.stringify(updatedPreferences));
-    }
-  };
-
-  const savePreferences = () => {
-    // Here you would typically save to backend
-    alert('Preferences saved!');
-    setShowGeneralModal(false);
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      alert(`File selected: ${file.name}\nSize: ${(file.size / 1024 / 1024).toFixed(2)} MB\nType: ${file.type}`);
-      // Will implement actual upload logic later
-    }
-  };
-
-  const handleViewTranscription = (filename) => {
-    // Extract just the filename without extension for URL-safe navigation
-    const urlSafeFilename = encodeURIComponent(filename);
-    navigate(`/transcription/${urlSafeFilename}`);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      setSelectedFile(file);
-      // Simulate file input change
-      const fakeEvent = {
-        target: {
-          files: [file]
+        if (res.status === 401) {
+          clearAccessToken();
+          if (!cancelled) {
+            navigate("/login", { replace: true });
+          }
+          return;
         }
-      };
-      handleFileUpload(fakeEvent);
+
+        if (!res.ok) {
+          let detail = "";
+          try {
+            const body = await res.json();
+            detail = body.detail || JSON.stringify(body);
+          } catch {
+            // ignore parse error
+          }
+          const msg = detail || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+
+        const data = await res.json();
+        if (cancelled) return;
+        setUser(data);
+      } catch (err) {
+        console.error("auth ping failed:", err);
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Failed to load auth ping"
+          );
+          setStatus("error");
+        }
+        return;
+      }
+
+      // 2) Meetings list
+      setMeetingsStatus("loading");
+      setMeetingsError("");
+
+      try {
+        const mRes = await apiFetch("/v1/my/meetings?limit=50");
+
+        if (mRes.status === 401) {
+          clearAccessToken();
+          if (!cancelled) {
+            navigate("/login", { replace: true });
+          }
+          return;
+        }
+
+        if (mRes.status === 404) {
+          // No meetings yet
+          if (!cancelled) {
+            setMeetings([]);
+            setMeetingsStatus("ok");
+          }
+        } else if (!mRes.ok) {
+          let detail = "";
+          try {
+            const body = await mRes.json();
+            detail = body.detail || JSON.stringify(body);
+          } catch {
+            // ignore
+          }
+          const msg = detail || `HTTP ${mRes.status}`;
+          throw new Error(msg);
+        } else {
+          const body = await mRes.json();
+          if (cancelled) return;
+
+          let items = [];
+          if (Array.isArray(body)) {
+            items = body;
+          } else if (Array.isArray(body.items)) {
+            items = body.items;
+          }
+
+          items = items || [];
+          setMeetings(items);
+          setMeetingsStatus("ok");
+
+          // Default the uploadMeetingId to first meeting
+          if (!uploadMeetingId && items.length > 0) {
+            const first = items[0];
+            const id =
+              first.id ||
+              first.meeting_id ||
+              first.meetingId ||
+              first.uuid ||
+              "";
+            if (id) {
+              setUploadMeetingId(String(id));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("meetings load failed:", err);
+        if (!cancelled) {
+          setMeetingsError(
+            err instanceof Error ? err.message : "Failed to load meetings"
+          );
+          setMeetingsStatus("error");
+        }
+      }
+
+      if (!cancelled) {
+        setStatus("ok");
+      }
+    }
+
+    loadAll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, uploadMeetingId]);
+
+  // ------------------------
+  // Poll /v1/uploads/{lastUploadId}
+  // ------------------------
+  useEffect(() => {
+    if (!lastUploadId) return;
+
+    let cancelled = false;
+    let intervalId = null;
+
+    async function pollOnce() {
+      try {
+        const res = await apiFetch(`/v1/uploads/${lastUploadId}`);
+
+        if (res.status === 401) {
+          clearAccessToken();
+          if (!cancelled) {
+            navigate("/login", { replace: true });
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          let detail = "";
+          try {
+            const body = await res.json();
+            detail = body.detail || JSON.stringify(body);
+          } catch {
+            // ignore
+          }
+          const msg = detail || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+
+        const body = await res.json();
+        if (cancelled) return;
+
+        const st = body.status || null;
+        setLastUploadStatus(st);
+        setLastUploadDetail(body);
+        setLastUploadPollError("");
+
+        // Update the user-facing uploadInfo box too
+        setUploadInfo((prev) => ({
+          ...(prev || {}),
+          ...body,
+          upload_id: body.id || lastUploadId,
+        }));
+
+        // Stop polling when terminal
+        if (st === "done" || st === "failed") {
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        }
+      } catch (err) {
+        console.error("upload status poll failed:", err);
+        if (!cancelled) {
+          setLastUploadPollError(
+            err instanceof Error ? err.message : "Failed to poll upload status"
+          );
+        }
+      }
+    }
+
+    // Fire once immediately, then every 2s
+    pollOnce();
+    intervalId = setInterval(pollOnce, 2000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [lastUploadId, navigate]);
+
+  // ------------------------
+  // Handlers
+  // ------------------------
+  const handleLogout = () => {
+    clearAccessToken();
+    navigate("/login", { replace: true });
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setUploadFile(file);
+    setUploadStatus("idle");
+    setUploadError("");
+    // keep uploadInfo/lastUploadId separate; they describe last completed upload
+  };
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+
+    const trimmedMeetingId = (uploadMeetingId || "").trim();
+
+    if (!trimmedMeetingId) {
+      setUploadError("Please select or enter a meeting ID first.");
+      setUploadStatus("error");
+      return;
+    }
+
+    if (!uploadFile) {
+      setUploadError("Please choose a file to upload.");
+      setUploadStatus("error");
+      return;
+    }
+
+    setUploadStatus("uploading");
+    setUploadError("");
+    setUploadInfo(null);
+    setLastUploadPollError("");
+    setLastUploadStatus(null);
+
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    formData.append("meeting_id", trimmedMeetingId);
+
+    try {
+      const res = await apiFetch("/v1/uploads", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        clearAccessToken();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const body = await res.json();
+          detail = body.detail || JSON.stringify(body);
+        } catch {
+          // ignore
+        }
+        const msg = detail || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const body = await res.json();
+      const id = body.upload_id || body.id;
+
+      setUploadInfo(body);
+      setUploadStatus("queued");
+      if (id) {
+        setLastUploadId(id);
+        setLastUploadStatus(body.status || "queued");
+      }
+    } catch (err) {
+      console.error("upload failed:", err);
+      setUploadError(
+        err instanceof Error ? err.message : "Failed to upload file"
+      );
+      setUploadStatus("error");
     }
   };
 
-  return (
-    <div className="dashboard-container">
-      <div className="top-bar"></div>
+  async function handleCreateMeeting() {
+  if (createStatus === "creating") return;
 
-      <header className="dashboard-header">
-        <div className="logo-container">
-          <div className="logo-icon">
-            <img src={notablyLogo} alt="Notably Logo" />
+  setCreateStatus("creating");
+  setCreateError(null);
+
+  try {
+    const resp = await apiFetch("/v1/meetings", {
+      method: "POST",
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`Create failed: ${resp.status} ${text}`);
+    }
+
+    const data = await resp.json();
+    const newId = data.id;
+
+    // Use this for uploads
+    setUploadMeetingId(newId);
+
+    // Optimistically add to meetings list if it's not already there
+    setMeetings((prev) => {
+      const exists = prev.some((m) => {
+        const mid =
+          m.id || m.meeting_id || m.meetingId || m.uuid || "";
+        return String(mid) === String(newId);
+      });
+      if (exists) return prev;
+
+      return [
+        {
+          id: newId,
+          title: `New meeting ${String(newId).slice(0, 8)}…`,
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ];
+    });
+
+    setCreateStatus("ok");
+  } catch (err) {
+    console.error(err);
+    setCreateError(
+      err?.message || "Failed to create meeting"
+    );
+    setCreateStatus("error");
+  }
+}
+
+  // ------------------------
+  // Render
+  // ------------------------
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "#020617",
+        color: "#e5e7eb",
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      }}
+    >
+      <header
+        style={{
+          padding: "1rem 1.5rem",
+          borderBottom: "1px solid #111827",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "#020617",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>Notably</div>
+          <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
+            Dashboard
           </div>
         </div>
-        <button className="logout-btn" onClick={handleLogout}>
-          Logout
+
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: "0.4rem 0.8rem",
+            borderRadius: "999px",
+            border: "1px solid #4b5563",
+            background: "transparent",
+            color: "#e5e7eb",
+            fontSize: "0.85rem",
+            cursor: "pointer",
+          }}
+        >
+          Log out
         </button>
       </header>
 
-      <div className="main-container">
-        <aside className="sidebar">
-          <div className="menu-dropdown">
-            <button 
-              className="nav-btn menu-btn"
-              onClick={handleMenuClick}
-            >
-              Menu
-            </button>
-            {showMenuDropdown && (
-              <div className="dropdown-content">
-                <button className="dropdown-item" onClick={() => navigateTo('settings')}>
-                  Settings
-                </button>
-                <button className="dropdown-item" onClick={() => navigateTo('api')}>
-                  API Documentation
-                </button>
-                <button className="dropdown-item" onClick={() => navigateTo('faq')}>
-                  FAQ
-                </button>
-                <button className="dropdown-item" onClick={() => navigateTo('preferences')}>
-                  Preferences
-                </button>
-              </div>
-            )}
+      <main
+        style={{
+          flex: 1,
+          padding: "1.5rem",
+          maxWidth: "960px",
+          width: "100%",
+          margin: "0 auto",
+          display: "grid",
+          gap: "1rem",
+        }}
+      >
+        {/* Auth status */}
+        {status === "loading" && (
+          <p style={{ color: "#9ca3af" }}>Checking your session…</p>
+        )}
+
+        {status === "error" && (
+          <div
+            style={{
+              padding: "1rem",
+              borderRadius: "0.75rem",
+              background: "#450a0a",
+              color: "#fecaca",
+              fontSize: "0.9rem",
+            }}
+          >
+            <strong>Something went wrong.</strong>
+            <div style={{ marginTop: "0.25rem" }}>{error}</div>
           </div>
-        </aside>
+        )}
 
-        <main className="content">
-          <section className="upload-section">
-            <div className="upload-title"></div>
-            <label 
-              htmlFor="fileUpload" 
-              className="upload-box"
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
+        {status === "ok" && user && (
+          <>
+            {/* Signed in box */}
+            <section
+              style={{
+                padding: "1rem 1.25rem",
+                borderRadius: "0.75rem",
+                background:
+                  "radial-gradient(circle at top left, #1d4ed8 0, #020617 50%, #020617 100%)",
+                border: "1px solid #1f2937",
+              }}
             >
-              <svg className="upload-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <h3>Drop files here or click to browse</h3>
-              <p>Upload your audio or video file</p>
-              <p className="file-types">Supported formats: MP3, MP4, WAV, M4A</p>
-            </label>
-            <input 
-              type="file" 
-              id="fileUpload" 
-              accept="audio/*,video/*" 
-              onChange={handleFileUpload}
-            />
-          </section>
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#bfdbfe",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                Signed in as
+              </div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
+                {user.email || "unknown"}
+              </div>
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  color: "#cbd5f5",
+                  marginTop: "0.35rem",
+                }}
+              >
+                user_id: <code>{user.user_id}</code>
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                dev: <code>{String(user.dev)}</code>
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                sub: <code>{user.sub}</code>
+              </div>
+            </section>
 
-          <section className="dashboard-section">
-            <h2>Dashboard</h2>
-            <div className="file-list">
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Team_Meeting_2024-11-10.mp4</h3>
-                  <p>Status: Transcript Ready • 45:23 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Team_Meeting_2024-11-10.mp4')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Client_Call_2024-11-09.wav</h3>
-                  <p>Status: Transcript Ready • 32:15 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Client_Call_2024-11-09.wav')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Board_Meeting_2024-11-08.mp3</h3>
-                  <p>Status: Transcript Ready • 1:23:45 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Board_Meeting_2024-11-08.mp3')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Weekly_Standup_2024-11-07.m4a</h3>
-                  <p>Status: Transcript Ready • 28:12 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Weekly_Standup_2024-11-07.m4a')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Product_Review_2024-11-06.mp4</h3>
-                  <p>Status: Transcript Ready • 56:33 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Product_Review_2024-11-06.mp4')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Interview_Sarah_2024-11-05.wav</h3>
-                  <p>Status: Transcript Ready • 41:27 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Interview_Sarah_2024-11-05.wav')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Sales_Pitch_2024-11-04.mp3</h3>
-                  <p>Status: Transcript Ready • 37:18 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Sales_Pitch_2024-11-04.mp3')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Training_Session_2024-11-03.mp4</h3>
-                  <p>Status: Transcript Ready • 1:15:22 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Training_Session_2024-11-03.mp4')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Investor_Call_2024-11-02.wav</h3>
-                  <p>Status: Transcript Ready • 52:44 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Investor_Call_2024-11-02.wav')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Marketing_Strategy_2024-11-01.m4a</h3>
-                  <p>Status: Transcript Ready • 43:17 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Marketing_Strategy_2024-11-01.m4a')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Customer_Feedback_2024-10-31.mp3</h3>
-                  <p>Status: Transcript Ready • 29:55 min</p>
-                </div>
-                <button className="view-btn" onClick={() => handleViewTranscription('Customer_Feedback_2024-10-31.mp3')}>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#00ff88" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Budget_Planning_2024-10-30.mp4</h3>
-                  <p>Status: Transcribing... • 38:42 min</p>
-                </div>
-                <button className="view-btn disabled" disabled>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#808080" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="file-item">
-                <div className="file-info">
-                  <h3>Code_Review_2024-10-29.wav</h3>
-                  <p>Status: Processing... • 25:33 min</p>
-                </div>
-                <button className="view-btn disabled" disabled>
-                  <svg className="eye-icon" viewBox="0 0 24 24" fill="none" stroke="#808080" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </section>
-        </main>
-      </div>
+            {/* Uploads */}
+            <section
+              style={{
+                padding: "1rem 1.25rem",
+                borderRadius: "0.75rem",
+                border: "1px solid #111827",
+                background: "#020617",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1rem",
+                  marginBottom: "0.5rem",
+                  fontWeight: 500,
+                }}
+              >
+                Uploads
+              </h2>
 
-      {/* General Preferences Modal */}
-      {showGeneralModal && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Preferences</h2>
-              <button className="close-button" onClick={closeModal}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <line x1="18" y1="6" x2="6" y2="18" stroke="#00ff88" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="6" y1="6" x2="18" y2="18" stroke="#00ff88" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
+              {/* Debug line so we can see what's going on */}
+              <p style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                meetingsStatus: <code>{meetingsStatus}</code>, count:{" "}
+                <code>{meetings.length}</code>, selectedMeetingId:{" "}
+                <code>{uploadMeetingId || "(empty)"}</code>
+              </p>
 
-            <div className="modal-body">
-              {/* Language Section */}
-              <div className="preference-section">
-                <h3>Language</h3>
-                <p>Choose your preferred language</p>
-                <select 
-                  className="preference-dropdown"
-                  value={preferences.language}
-                  onChange={(e) => handlePreferenceChange('language', e.target.value)}
+              {meetingsStatus === "error" && (
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#fecaca",
+                    background: "#450a0a",
+                    padding: "0.4rem 0.6rem",
+                    borderRadius: "0.5rem",
+                    marginBottom: "0.5rem",
+                  }}
                 >
-                  <option value="English">English</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="French">French</option>
-                  <option value="German">German</option>
-                </select>
-              </div>
+                  Failed to load meetings: {meetingsError}
+                </p>
+              )}
 
-              {/* Theme Section */}
-              <div className="preference-section">
-                <h3>Appearance</h3>
-                <p>Select your theme preference</p>
-                <div className="theme-buttons">
-                  <button 
-                    className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
-                    onClick={() => handlePreferenceChange('theme', 'light')}
+              {meetingsStatus === "ok" && meetings.length === 0 && (
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#9ca3af",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  You don’t have any meetings yet. You can still manually type a
+                  meeting ID below (we’ll wire up “New meeting” later).
+                </p>
+              )}
+
+              <form
+                onSubmit={handleUpload}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                  marginTop: "0.5rem",
+                  fontSize: "0.9rem",
+                }}
+              >
+                {/* Meeting dropdown */}
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.25rem",
+                  }}
+                >
+                  <span style={{ color: "#e5e7eb" }}>Meeting (from list)</span>
+                  <select
+                    value={
+                      meetings.length === 0
+                        ? ""
+                        : uploadMeetingId &&
+                          meetings.some((m) => {
+                            const id =
+                              m.id ||
+                              m.meeting_id ||
+                              m.meetingId ||
+                              m.uuid;
+                            return String(id) === String(uploadMeetingId);
+                          })
+                        ? uploadMeetingId
+                        : ""
+                    }
+                    onChange={(e) => setUploadMeetingId(e.target.value)}
+                    disabled={meetings.length === 0}
+                    style={{
+                      background: "#020617",
+                      color: "#e5e7eb",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      padding: "0.4rem 0.5rem",
+                    }}
                   >
-                    <div className="theme-indicator"></div>
-                    Light
-                  </button>
-                  <button 
-                    className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
-                    onClick={() => handlePreferenceChange('theme', 'dark')}
+                    {meetings.length === 0 && (
+                      <option value="">No meetings available</option>
+                    )}
+                    {meetings.length > 0 && (
+                      <option value="">– Select a meeting –</option>
+                    )}
+                    {meetings.map((m) => {
+                      const id =
+                        m.id ||
+                        m.meeting_id ||
+                        m.meetingId ||
+                        m.uuid ||
+                        "";
+                      const name =
+                        m.title ||
+                        m.name ||
+                        m.topic ||
+                        (id
+                          ? `Meeting ${String(id).slice(0, 8)}…`
+                          : "Meeting");
+                      return (
+                        <option key={id || name} value={id}>
+                          {name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+
+                {/* Explicit meeting ID text box */}
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.25rem",
+                  }}
+                >
+                  <span style={{ color: "#e5e7eb" }}>
+                    Meeting ID (used for upload)
+                  </span>
+                  <input
+                    type="text"
+                    value={uploadMeetingId}
+                    onChange={(e) => setUploadMeetingId(e.target.value)}
+                    placeholder="Paste or type a meeting ID"
+                    style={{
+                      background: "#020617",
+                      color: "#e5e7eb",
+                      borderRadius: "0.5rem",
+                      border: "1px solid #374151",
+                      padding: "0.4rem 0.5rem",
+                      fontFamily:
+                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                      fontSize: "0.85rem",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#9ca3af",
+                    }}
                   >
-                    <div className="theme-indicator active"></div>
-                    Dark
-                  </button>
-                </div>
-              </div>
+                    Tip: copy the ID from “My meetings” below and paste it here.
+                  </span>
+                </label>
 
-              {/* Notifications Section */}
-              <div className="preference-section">
-                <h3>Notifications</h3>
-                <p>Manage your notification preferences</p>
-                <div className="notification-toggle">
-                  <span>Enable push notifications</span>
-                  <label className="toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={preferences.notifications}
-                      onChange={(e) => handlePreferenceChange('notifications', e.target.checked)}
-                    />
-                    <span className="slider"></span>
-                  </label>
-                </div>
-              </div>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mid = (uploadMeetingId || "").trim();
+                    if (!mid) return; // no-op if empty; could also show a small message
+                    navigate(`/meetings/${mid}`);
+                  }}
+                  style={{
+                    alignSelf: "flex-start",
+                    padding: "0.3rem 0.8rem",
+                    borderRadius: "999px",
+                    border: "1px solid #374151",
+                    background: "transparent",
+                    color: "#e5e7eb",
+                    fontSize: "0.8rem",
+                    cursor: uploadMeetingId ? "pointer" : "default",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  View meeting by ID →
+                </button>
 
-            <div className="modal-footer">
-              <button className="save-button" onClick={savePreferences}>
-                SAVE PREFERENCES
+
+
+                {/* File input */}
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.25rem",
+                  }}
+                >
+                  <span style={{ color: "#e5e7eb" }}>Audio file</span>
+                  <input
+                    type="file"
+                    accept="audio/*,video/*"
+                    onChange={handleFileChange}
+                    style={{
+                      color: "#e5e7eb",
+                      fontSize: "0.9rem",
+                    }}
+                  />
+                </label>
+
+                {uploadStatus === "error" && uploadError && (
+                  <div
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#fecaca",
+                      background: "#450a0a",
+                      padding: "0.4rem 0.6rem",
+                      borderRadius: "0.5rem",
+                    }}
+                  >
+                    {uploadError}
+                  </div>
+                )}
+
+                {uploadStatus === "queued" && uploadInfo && (
+                  <div
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#bbf7d0",
+                      background: "#064e3b",
+                      padding: "0.4rem 0.6rem",
+                      borderRadius: "0.5rem",
+                    }}
+                  >
+                    Upload queued! id:{" "}
+                    <code>{uploadInfo.upload_id || uploadInfo.id}</code>, status:{" "}
+                    <code>{uploadInfo.status}</code>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={uploadStatus === "uploading"}
+                  style={{
+                    marginTop: "0.25rem",
+                    alignSelf: "flex-start",
+                    padding: "0.4rem 0.9rem",
+                    borderRadius: "999px",
+                    border: "none",
+                    background:
+                      uploadStatus === "uploading" ? "#4b5563" : "#2563eb",
+                    color: "#e5e7eb",
+                    fontSize: "0.9rem",
+                    fontWeight: 500,
+                    cursor:
+                      uploadStatus === "uploading" ? "default" : "pointer",
+                  }}
+                >
+                  {uploadStatus === "uploading"
+                    ? "Uploading…"
+                    : "Upload recording"}
+                </button>
+              </form>
+            </section>
+
+            {/* Latest upload status */}
+            {lastUploadId && (
+              <section
+                style={{
+                  padding: "1rem 1.25rem",
+                  borderRadius: "0.75rem",
+                  border: "1px solid #111827",
+                  background: "#020617",
+                }}
+              >
+                <h2
+                  style={{
+                    fontSize: "1rem",
+                    marginBottom: "0.5rem",
+                    fontWeight: 500,
+                  }}
+                >
+                  Latest upload status
+                </h2>
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#9ca3af",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  upload_id: <code>{lastUploadId}</code>
+                </p>
+                <p
+                  style={{
+                    fontSize: "0.9rem",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  Status:{" "}
+                  <code>{lastUploadStatus || "(checking…)"}</code>
+                </p>
+
+                {lastUploadPollError && (
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#fecaca",
+                      background: "#450a0a",
+                      padding: "0.4rem 0.6rem",
+                      borderRadius: "0.5rem",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    Error polling upload: {lastUploadPollError}
+                  </p>
+                )}
+
+                {lastUploadStatus === "done" && (
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#bbf7d0",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    Background processing finished. Stub transcript & summary
+                    should now exist for this meeting. We’ll wire up the
+                    transcript view next.
+                  </p>
+                )}
+
+                {lastUploadStatus === "failed" && lastUploadDetail?.error && (
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "#fecaca",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    Worker reported an error:{" "}
+                    <code>{String(lastUploadDetail.error)}</code>
+                  </p>
+                )}
+              </section>
+            )}
+
+            {/* Meetings list */}
+            <section
+              style={{
+                padding: "1rem 1.25rem",
+                borderRadius: "0.75rem",
+                border: "1px solid #111827",
+                background: "#020617",
+              }}
+            >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 500,
+                }}
+              >
+                My meetings
+              </h2>
+
+              <button
+                type="button"
+                onClick={handleCreateMeeting}
+                disabled={createStatus === "creating"}
+                style={{
+                  padding: "0.25rem 0.7rem",
+                  borderRadius: "999px",
+                  border: "1px solid #374151",
+                  background:
+                    createStatus === "creating" ? "#4b5563" : "transparent",
+                  color: "#e5e7eb",
+                  fontSize: "0.8rem",
+                  cursor:
+                    createStatus === "creating" ? "default" : "pointer",
+                }}
+              >
+                {createStatus === "creating" ? "Creating…" : "New meeting"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+
+              {createError && (
+                <p
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "#fecaca",
+                    background: "#450a0a",
+                    padding: "0.4rem 0.6rem",
+                    borderRadius: "0.5rem",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  Failed to create meeting: {createError}
+                </p>
+              )}
+
+
+              {meetingsStatus === "loading" && (
+                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                  Loading meetings…
+                </p>
+              )}
+
+              {meetingsStatus === "error" && (
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#fecaca",
+                    background: "#450a0a",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "0.5rem",
+                  }}
+                >
+                  Failed to load meetings: {meetingsError}
+                </p>
+              )}
+
+              {meetingsStatus === "ok" && meetings.length === 0 && (
+                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                  You don’t have any meetings yet.
+                </p>
+              )}
+
+              {meetingsStatus === "ok" && meetings.length > 0 && (
+                <ul
+                  style={{
+                    listStyle: "none",
+                    padding: 0,
+                    margin: 0,
+                    display: "grid",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {meetings.map((m) => {
+                    const id =
+                      m.id ||
+                      m.meeting_id ||
+                      m.meetingId ||
+                      m.uuid ||
+                      "unknown-id";
+                    const name =
+                      m.title ||
+                      m.name ||
+                      m.topic ||
+                      `Meeting ${id.slice(0, 8)}…`;
+                    const created =
+                      m.created_at || m.createdAt || m.created || null;
+
+                    return (
+                      <li
+                        key={id}
+                        style={{
+                          padding: "0.6rem 0.75rem",
+                          borderRadius: "0.5rem",
+                          border: "1px solid #111827",
+                          background: "#020617",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.25rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "0.95rem",
+                            fontWeight: 500,
+                            color: "#e5e7eb",
+                          }}
+                        >
+                          {name}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#9ca3af",
+                            display: "flex",
+                            gap: "0.5rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span>
+                            id: <code>{id}</code>
+                          </span>
+                          {created && (
+                            <span>
+                              created:{" "}
+                              <code>
+                                {String(created).replace("T", " ").slice(0, 19)}
+                              </code>
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/meetings/${id}`)}
+                            style={{
+                              marginTop: "0.15rem",
+                              padding: "0.25rem 0.7rem",
+                              borderRadius: "999px",
+                              border: "1px solid #374151",
+                              background: "transparent",
+                              color: "#e5e7eb",
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            View meeting →
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+      </main>
     </div>
   );
-};
+}
 
-export default DashboardPage;
+
