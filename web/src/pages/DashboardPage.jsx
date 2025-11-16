@@ -32,6 +32,10 @@ export default function DashboardPage() {
   const [lastUploadDetail, setLastUploadDetail] = useState(null);
   const [lastUploadPollError, setLastUploadPollError] = useState("");
 
+  // Meeting deletion
+  const [deleteError, setDeleteError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
 
   // ------------------------
   // Initial load: auth ping + meetings
@@ -324,6 +328,43 @@ export default function DashboardPage() {
       setUploadStatus("error");
     }
   };
+
+  async function handleDeleteMeeting(id, label) {
+  if (!id) return;
+
+  const ok = window.confirm(
+    `Delete this meeting?\n\n${label || id}\n\nThis cannot be undone.`
+  );
+  if (!ok) return;
+
+  try {
+    setDeleteError(null);
+    setDeletingId(id);
+
+    const resp = await apiFetch(`/v1/meetings/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!resp.ok && resp.status !== 204) {
+      const text = await resp.text();
+      throw new Error(`HTTP ${resp.status} ${text}`);
+    }
+
+    // Optimistically remove from list
+    setMeetings((prev) => (prev || []).filter((m) => {
+      const mid = m.id || m.meeting_id || m.meetingId || m.uuid;
+      return String(mid) !== String(id);
+    }));
+  } catch (err) {
+    console.error("Failed to delete meeting", err);
+    setDeleteError(
+      err?.message || "Failed to delete meeting. Please try again."
+    );
+  } finally {
+    setDeletingId(null);
+  }
+}
+
 
   async function handleCreateMeeting() {
   if (createStatus === "creating") return;
@@ -907,6 +948,20 @@ export default function DashboardPage() {
                 </p>
               )}
 
+              {deleteError && (
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#fecaca",
+                    background: "#450a0a",
+                    padding: "0.4rem 0.6rem",
+                    borderRadius: "0.5rem",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  {deleteError}
+                </p>
+              )}
 
               {meetingsStatus === "loading" && (
                 <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
@@ -935,98 +990,151 @@ export default function DashboardPage() {
               )}
 
               {meetingsStatus === "ok" && meetings.length > 0 && (
-                <ul
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: 0,
-                    display: "grid",
-                    gap: "0.5rem",
-                  }}
-                >
-                  {meetings.map((m) => {
-                    const id =
-                      m.id ||
-                      m.meeting_id ||
-                      m.meetingId ||
-                      m.uuid ||
-                      "unknown-id";
-                    const name =
-                      m.title ||
-                      m.name ||
-                      m.topic ||
-                      `Meeting ${id.slice(0, 8)}…`;
-                    const created =
-                      m.created_at || m.createdAt || m.created || null;
+                  <ul
+                    style={{
+                      listStyle: "none",
+                      padding: 0,
+                      margin: 0,
+                      display: "grid",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    {meetings.map((m) => {
+                      const id =
+                        m.id ||
+                        m.meeting_id ||
+                        m.meetingId ||
+                        m.uuid ||
+                        "unknown-id";
 
-                    return (
-                      <li
-                        key={id}
-                        style={{
-                          padding: "0.6rem 0.75rem",
-                          borderRadius: "0.5rem",
-                          border: "1px solid #111827",
-                          background: "#020617",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "0.95rem",
-                            fontWeight: 500,
-                            color: "#e5e7eb",
-                          }}
-                        >
-                          {name}
-                        </div>
+                      const created =
+                        m.created_at || m.createdAt || m.created || null;
 
-                        <div
+                      // 👇 NEW: prefer the latest upload filename as the display name
+                      const rawFilename =
+                        m.latest_upload_filename ||
+                        m.filename ||
+                        m.file_name ||
+                        m.fileName ||
+                        null;
+
+                      const baseName = rawFilename
+                        ? rawFilename.replace(/\.[^/.]+$/, "") // strip extension
+                        : null;
+
+                      const name =
+                        baseName ||
+                        m.title ||
+                        m.name ||
+                        m.topic ||
+                        `Meeting ${id.slice(0, 8)}…`;
+
+                      return (
+                        <li
+                          key={id}
                           style={{
-                            fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            padding: "0.6rem 0.75rem",
+                            borderRadius: "0.5rem",
+                            border: "1px solid #111827",
+                            background: "#020617",
                             display: "flex",
-                            gap: "0.5rem",
-                            flexWrap: "wrap",
+                            flexDirection: "column",
+                            gap: "0.25rem",
                           }}
                         >
-                          <span>
-                            id: <code>{id}</code>
-                          </span>
-                          {created && (
-                            <span>
-                              created:{" "}
-                              <code>
-                                {String(created).replace("T", " ").slice(0, 19)}
-                              </code>
-                            </span>
-                          )}
-                        </div>
-
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/meetings/${id}`)}
+                          <div
                             style={{
-                              marginTop: "0.15rem",
-                              padding: "0.25rem 0.7rem",
-                              borderRadius: "999px",
-                              border: "1px solid #374151",
-                              background: "transparent",
+                              fontSize: "0.95rem",
+                              fontWeight: 500,
                               color: "#e5e7eb",
-                              fontSize: "0.8rem",
-                              cursor: "pointer",
                             }}
                           >
-                            View meeting →
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                            {name}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "#9ca3af",
+                              display: "flex",
+                              gap: "0.5rem",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {rawFilename && (
+                              <span>
+                                file: <code>{rawFilename}</code>
+                              </span>
+                            )}
+                            <span>
+                              id: <code>{id}</code>
+                            </span>
+                            {created && (
+                              <span>
+                                created:{" "}
+                                <code>
+                                  {String(created).replace("T", " ").slice(0, 19)}
+                                </code>
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: "0.15rem",
+                              display: "flex",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            {/* View button */}
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/meetings/${id}`)}
+                              style={{
+                                padding: "0.25rem 0.7rem",
+                                borderRadius: "999px",
+                                border: "1px solid #374151",
+                                background: "transparent",
+                                color: "#e5e7eb",
+                                fontSize: "0.8rem",
+                                cursor: "pointer",
+                              }}
+                            >
+                              View meeting →
+                            </button>
+
+                            {/* Delete button (red trashcan) */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMeeting(id, name)}
+                              disabled={deletingId === id}
+                              style={{
+                                padding: "0.25rem 0.7rem",
+                                borderRadius: "999px",
+                                border: "1px solid #7f1d1d",
+                                background: deletingId === id ? "#7f1d1d" : "transparent",
+                                color: "#fecaca",
+                                fontSize: "0.8rem",
+                                cursor: deletingId === id ? "default" : "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.25rem",
+                              }}
+                            >
+                              <span role="img" aria-label="Delete">
+                                🗑️
+                              </span>
+                              {deletingId === id ? "Deleting…" : "Delete"}
+                            </button>
+                          </div>
+
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+
             </section>
           </>
         )}

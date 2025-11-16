@@ -19,6 +19,7 @@ from sqlalchemy import func
 from fastapi import Response
 from fastapi import Query
 from ...export_pdf import render_meeting_pdf
+from ...export_md import render_meeting_markdown
 from backend.app.team_ops import get_or_create_default_team
 from backend.app.access import (
     assert_user_can_access_meeting,
@@ -519,6 +520,26 @@ async def export_pdf(meeting_id: str, db: Session = Depends(get_session)):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="meeting-{meeting_id}.pdf"'},
     )
+
+@router.get("/exports/markdown")
+async def export_markdown(meeting_id: str, db: Session = Depends(get_session)):
+    """
+    Render a markdown export for a meeting: transcript + summary bullets.
+    """
+    try:
+        md_bytes = render_meeting_markdown(db, meeting_id)
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    if not md_bytes:
+        raise HTTPException(status_code=404, detail="Nothing to export")
+
+    return Response(
+        content=md_bytes,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename=\"meeting-{meeting_id}.md\"'},
+    )
+
 
 @router.post("/uploads/{upload_id}/tags", response_model=TagListOut)
 async def add_tags(upload_id: str, payload: TagListIn, db: Session = Depends(get_session)):
