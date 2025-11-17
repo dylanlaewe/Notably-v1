@@ -54,6 +54,51 @@ export default function MeetingDetailPage() {
     const url = `${base}/v1/exports/markdown?meeting_id=${meetingId}`;
     window.open(url, "_blank");
   }
+  
+  function highlightText(text, query) {
+    if (!text) return "";
+    const q = (query || "").trim();
+    if (!q) return text;
+
+    const lower = text.toLowerCase();
+    const qLower = q.toLowerCase();
+
+    const parts = [];
+    let idx = 0;
+    let key = 0;
+
+    while (true) {
+      const matchIndex = lower.indexOf(qLower, idx);
+      if (matchIndex === -1) {
+        parts.push(text.slice(idx));
+        break;
+      }
+
+      if (matchIndex > idx) {
+        parts.push(text.slice(idx, matchIndex));
+      }
+
+      const matchText = text.slice(matchIndex, matchIndex + q.length);
+      parts.push(
+        <mark
+          key={`h-${key++}`}
+          style={{
+            backgroundColor: "rgba(34,197,94,0.35)",
+            color: "#f9fafb",
+            padding: "0 0.05em",
+            borderRadius: "0.15rem",
+          }}
+        >
+          {matchText}
+        </mark>
+      );
+
+      idx = matchIndex + q.length;
+    }
+
+    return parts;
+  }
+
 
   // ---- Actions: create ----
   async function handleCreateAction(e) {
@@ -332,23 +377,30 @@ export default function MeetingDetailPage() {
           throw new Error(detail || `Summary HTTP ${sumRes.status}`);
         }
 
-        // Actions
-        let actJson = [];
-        if (actRes.ok) {
-          actJson = await actRes.json();
-        } else if (actRes.status === 404) {
-          actJson = [];
-        } else {
-          const text = await actRes.text();
-          throw new Error(text || `Actions HTTP ${actRes.status}`);
-        }
+    // Actions
+    let actJson = [];
+    if (actRes.ok) {
+      actJson = await actRes.json();
+    } else if (actRes.status === 404) {
+      actJson = [];
+    } else {
+      const text = await actRes.text();
+      throw new Error(text || `Actions HTTP ${actRes.status}`);
+    }
 
-        if (cancelled) return;
+    if (cancelled) return;
 
-        setTranscript(trJson);
-        setSummary(sumJson);
-        setActions(actJson || []);
-        setActionsStatus("ok");
+    const actItems = Array.isArray(actJson)
+      ? actJson
+      : Array.isArray(actJson.items)
+      ? actJson.items
+      : [];
+
+    setTranscript(trJson);
+    setSummary(sumJson);
+    setActions(actItems);
+    setActionsStatus("ok");
+
       } catch (err) {
         console.error("Failed to load meeting detail:", err);
         if (!cancelled) {
@@ -902,7 +954,10 @@ export default function MeetingDetailPage() {
                         </span>
                       )}
                     </div>
-                    <div>{hit.text || "(no text)"}</div>
+                    <div>
+                        {hit.text ? highlightText(hit.text, searchQuery) : "(no text)"}
+                    </div>
+
                   </li>
                 ))}
               </ul>
@@ -1167,24 +1222,6 @@ export default function MeetingDetailPage() {
                 </li>
               ))}
             </ul>
-          )}
-
-          {/* Debug: raw JSON so we can see backend shape */}
-          {actionsStatus === "ok" && (
-            <pre
-              style={{
-                marginTop: "0.75rem",
-                fontSize: "0.7rem",
-                color: "#9ca3af",
-                background: "#020617",
-                borderRadius: "0.5rem",
-                padding: "0.5rem",
-                border: "1px dashed #374151",
-                overflowX: "auto",
-              }}
-            >
-              Actions debug: {JSON.stringify(actions, null, 2)}
-            </pre>
           )}
         </section>
       </main>

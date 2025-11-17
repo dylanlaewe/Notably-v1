@@ -46,7 +46,7 @@
 /* FAQ page container */
 .faq-container {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  background: var(--bg-primary);
+  background: transparent;
   background-image: 
     radial-gradient(circle at 20% 80%, rgba(0, 255, 136, 0.05) 0%, transparent 50%),
     radial-gradient(circle at 80% 20%, rgba(0, 255, 136, 0.03) 0%, transparent 50%);

@@ -5,11 +5,26 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #030712; /* main background */
-  color: var(--text-primary, #f9fafb);
+  background-color: var(--app-bg);
+  color: var(--text-primary, #0f172a);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
 }
+
+:root {
+  --app-bg: #030712;
+  --app-bg-header: #020617;
+  --app-bg-sidebar: #020617;
+  --app-bg-content: #030712;
+}
+
+[data-theme="light"] {
+  --app-bg: #f9fafb;
+  --app-bg-header: #ffffff;
+  --app-bg-sidebar: #f3f4f6;
+  --app-bg-content: #f9fafb;
+}
+
 
 /* Top header */
 .app-shell-header {
@@ -18,7 +33,7 @@
   align-items: center;
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid rgba(15, 23, 42, 1);
-  background-color: #020617; /* darker than main */
+  background-color: var(--app-bg-header);
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.85);
 }
 
@@ -70,7 +85,7 @@
 /* Sidebar: fixed-height column, darker than main */
 .app-shell-sidebar {
   width: 230px;
-  background-color: #020617; /* darker black/grey */
+  background-color: var(--app-bg-sidebar);
   border-right: 1px solid rgba(15, 23, 42, 1);
   padding: 0.75rem 0.75rem 1rem 1rem;
   display: flex;
@@ -271,7 +286,71 @@
   flex: 1;
   padding: 1.5rem 1.75rem;
   overflow-y: auto;
-  background-color: #030712; /* slightly lighter than sidebar */
+  background-color: var(--app-bg-content);
+}
+
+/* Wrapper so the API docs item can show a floating submenu */
+.app-shell-nav-item-wrapper {
+  position: relative;
+}
+
+/* Floating submenu for API docs */
+.app-shell-subnav {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 0.3rem;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  background: #020617;
+  border: 1px solid rgba(15, 23, 42, 1);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.9),
+    0 0 0 1px rgba(15, 23, 42, 0.7);
+  display: none;
+  min-width: 180px;
+  z-index: 40;
+}
+
+/* Show submenu on hover or keyboard focus */
+.app-shell-nav-item-wrapper:hover .app-shell-subnav,
+.app-shell-nav-item-wrapper:focus-within .app-shell-subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.app-shell-subnav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  text-decoration: none;
+  color: #e5e7eb;
+  white-space: nowrap;
+}
+
+.app-shell-subnav-link:hover {
+  background: rgba(15, 23, 42, 0.9);
+  color: #f9fafb;
+}
+
+[data-theme="light"] .app-shell-subnav {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.15),
+    0 0 0 1px rgba(209, 213, 219, 0.8);
+}
+
+[data-theme="light"] .app-shell-subnav-link {
+  color: #111827;
+}
+
+[data-theme="light"] .app-shell-subnav-link:hover {
+  background: #f3f4f6;
 }
 
 /* Mobile: stack sidebar as a horizontal bar */

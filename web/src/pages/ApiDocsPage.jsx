@@ -1,194 +1,259 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext';
-import './ApiDocsPage.css';
-import notablyLogo from '../assets/notably logo.png';
+// web/src/pages/ApiDocsPage.jsx
+import React, { useEffect, useState } from "react";
+import "./ApiDocsPage.css";
 
 const ApiDocsPage = () => {
-  const navigate = useNavigate();
-  const { theme } = useTheme();
-  const [activeSection, setActiveSection] = useState('overview');
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  const sections = [
-    { id: 'overview', title: 'Overview' },
-    { id: 'auth', title: 'Authentication' },
-    { id: 'models', title: 'Data Models' },
-    { id: 'endpoints', title: 'API Endpoints' },
-    { id: 'errors', title: 'Error Handling' },
-    { id: 'examples', title: 'Examples' },
-    { id: 'openapi', title: 'OpenAPI Spec' }
-  ];
-
-  // Scroll detection for scroll-to-top button
+  // Scroll detection against the app-shell content area
   useEffect(() => {
+    const container =
+      document.querySelector(".app-shell-content") || window;
+
     const handleScroll = () => {
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollTop =
+        container === window
+          ? window.pageYOffset || document.documentElement.scrollTop
+          : container.scrollTop;
+
       setShowScrollTop(scrollTop > 300);
-      
-      // Update active section based on scroll position
-      const sections = ['overview', 'auth', 'models', 'endpoints', 'errors', 'examples', 'openapi'];
-      const currentSection = sections.find(sectionId => {
-        const element = document.getElementById(sectionId);
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          return rect.top <= 150 && rect.bottom > 150;
-        }
-        return false;
-      });
-      
-      if (currentSection && currentSection !== activeSection) {
-        setActiveSection(currentSection);
-      }
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [activeSection]);
+    handleScroll();
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
 
-  const goToDashboard = () => {
-    navigate('/dashboard');
-  };
+  const scrollToTop = () => {
+    const container =
+      document.querySelector(".app-shell-content") || window;
 
-  const scrollToSection = (sectionId) => {
-    setActiveSection(sectionId);
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+    if (container === window) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      container.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   return (
-    <div className="api-docs-container">
-      {/* Top Bar */}
-      <div className="top-bar"></div>
-      
-      {/* Header */}
-      <div className="api-docs-header">
-        <div className="logo-container">
-          <img src={notablyLogo} alt="Notably" className="logo-icon" />
-        </div>
-        <button onClick={goToDashboard} className="back-to-dashboard-btn">
-          ← Back to Dashboard
-        </button>
-      </div>
-
-      <div className="api-docs-layout">
-        {/* Sidebar Navigation */}
-        <aside className="api-docs-sidebar">
-          <nav className="sidebar-nav">
-            {sections.map((section) => (
-              <button
-                key={section.id}
-                className={`nav-item ${activeSection === section.id ? 'active' : ''}`}
-                onClick={() => scrollToSection(section.id)}
+    <div
+      style={{
+        minHeight: "100%",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily:
+          "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}
+    >
+      <main
+        className="api-docs-main"
+        style={{
+          flex: 1,
+          padding: 0,
+          maxWidth: "960px",
+          width: "100%",
+          margin: "0 auto",
+        }}
+      >
+        {/* Hero / header card */}
+        <section
+          style={{
+            marginTop: "1.5rem",
+            marginBottom: "1rem",
+            padding: "1rem 1.25rem",
+            borderRadius: "0.75rem",
+            background:
+              "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+            border: "1px solid rgba(34,197,94,0.35)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "0.8rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#bbf7d0",
+                  marginBottom: "0.25rem",
+                }}
               >
-                <span className="nav-title">{section.title}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
+                API
+              </div>
+              <h1
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 600,
+                  margin: 0,
+                }}
+              >
+                Notably API documentation
+              </h1>
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "#9ca3af",
+                  marginTop: "0.3rem",
+                  maxWidth: "40rem",
+                }}
+              >
+                Upload meeting recordings, process them asynchronously, and
+                fetch transcripts and summaries with timestamped citations.
+              </p>
+            </div>
 
-        {/* Main Content */}
-        <main className="api-docs-content">
-          <div className="docs-header">
-            <h1>Notably API Documentation</h1>
-            <div className="version-badge">v1.0.0</div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                gap: "0.35rem",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.15rem 0.55rem",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(34,197,94,0.4)",
+                  backgroundColor: "rgba(15,23,42,0.85)",
+                  color: "#bbf7d0",
+                }}
+              >
+                v1.0.0 · MVP
+              </span>
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#9ca3af",
+                }}
+              >
+                Base URL: <code>http://localhost:8000</code>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Overview Section */}
+        <section id="overview" className="docs-section">
+          <h2>High-level overview</h2>
+          <p className="section-intro">
+            The Notably API accepts meeting uploads, runs background processing
+            (transcription + summarization), and exposes results. Heavy work is
+            async via a queue/worker. Clients poll status or subscribe to
+            events.
+          </p>
+
+          <div className="info-grid">
+            <div className="info-card">
+              <h3>Base URL (development)</h3>
+              <code>http://localhost:8000</code>
+            </div>
+            <div className="info-card">
+              <h3>Authentication</h3>
+              <code>Authorization: Bearer &lt;jwt&gt;</code>
+            </div>
+            <div className="info-card">
+              <h3>Content type</h3>
+              <code>application/json</code>
+            </div>
+            <div className="info-card">
+              <h3>API version</h3>
+              <code>/v1/...</code>
+            </div>
           </div>
 
-          {/* Overview Section */}
-          <section id="overview" className="docs-section">
-            <h2>High-Level Overview</h2>
-            <p className="section-intro">
-              The Notably API accepts meeting uploads, runs background processing (transcription + summarization), 
-              and exposes results. Heavy work is async via a queue/worker. Clients poll status or subscribe to events.
-            </p>
-            
-            <div className="info-grid">
-              <div className="info-card">
-                <h3>Base URL (Development)</h3>
-                <code>http://localhost:8000</code>
-              </div>
-              <div className="info-card">
-                <h3>Authentication</h3>
-                <code>Authorization: Bearer &lt;jwt&gt;</code>
-              </div>
-              <div className="info-card">
-                <h3>Content Type</h3>
-                <code>application/json</code>
-              </div>
-              <div className="info-card">
-                <h3>API Version</h3>
-                <code>/v1/...</code>
-              </div>
-            </div>
+          <div className="workflow-section">
+            <h3>Core workflow (MVP)</h3>
+            <ol className="workflow-steps">
+              <li>
+                <strong>Upload:</strong>{" "}
+                <code>POST /v1/uploads</code> — client uploads audio/video
+                (multipart).
+              </li>
+              <li>
+                <strong>Storage:</strong> API stores media in MinIO and creates
+                an upload record (<code>status=queued</code>).
+              </li>
+              <li>
+                <strong>Processing:</strong> worker extracts audio, transcribes,
+                summarizes, and sets <code>status=done</code>.
+              </li>
+              <li>
+                <strong>Retrieval:</strong> client polls{" "}
+                <code>GET /v1/uploads/&lbrace;id&rbrace;</code> and{" "}
+                <code>GET /v1/uploads/&lbrace;id&rbrace;/result</code>.
+              </li>
+            </ol>
+          </div>
 
-            <div className="workflow-section">
-              <h3>Core Workflow (MVP)</h3>
-              <ol className="workflow-steps">
-                <li>
-                  <strong>Upload:</strong> <code>POST /v1/uploads</code> — Client uploads audio/video (multipart)
-                </li>
-                <li>
-                  <strong>Storage:</strong> API stores media in MinIO → creates upload record (status=queued)
-                </li>
-                <li>
-                  <strong>Processing:</strong> Worker extracts audio → transcribes → summarizes → sets status=done
-                </li>
-                <li>
-                  <strong>Retrieval:</strong> Client polls <code>GET /v1/uploads/{"{id}"}</code> and <code>GET /v1/uploads/{"{id}"}/result</code>
-                </li>
-              </ol>
-            </div>
+          <div className="limits-section">
+            <h3>File limits (phase 1)</h3>
+            <ul className="limits-list">
+              <li>
+                <strong>Max size:</strong> 1 GB
+              </li>
+              <li>
+                <strong>Max duration:</strong> 60 minutes
+              </li>
+              <li>
+                <strong>Accepted formats:</strong> .mp3, .wav, .m4a, .mp4, .mov
+              </li>
+            </ul>
+          </div>
+        </section>
 
-            <div className="limits-section">
-              <h3>File Limits (Phase 1)</h3>
-              <ul className="limits-list">
-                <li><strong>Max size:</strong> 1 GB</li>
-                <li><strong>Max duration:</strong> 60 minutes</li>
-                <li><strong>Accepted formats:</strong> .mp3, .wav, .m4a, .mp4, .mov</li>
-              </ul>
-            </div>
-          </section>
+        {/* Authentication Section */}
+        <section id="auth" className="docs-section">
+          <h2>Authentication</h2>
+          <p>
+            All API endpoints require authentication via Supabase JWT tokens.
+            Include the token in the <code>Authorization</code> header of your
+            requests.
+          </p>
 
-          {/* Authentication Section */}
-          <section id="auth" className="docs-section">
-            <h2>Authentication</h2>
-            <p>
-              All API endpoints require authentication via Supabase JWT tokens. Include the token in the 
-              Authorization header of your requests.
-            </p>
-            
+          <div className="code-block">
+            <h4>Header format</h4>
+            <pre>
+              <code>{`Authorization: Bearer <your-jwt-token>`}</code>
+            </pre>
+          </div>
+
+          <div className="auth-info">
+            <div className="auth-card">
+              <h4>Development mode</h4>
+              <p>For local development, you can use the API key authentication:</p>
+              <pre>
+                <code>{`X-Api-Key: your-dev-api-key`}</code>
+              </pre>
+            </div>
+            <div className="auth-card">
+              <h4>Production</h4>
+              <p>
+                Production requires valid Supabase JWT tokens obtained through
+                the authentication flow.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Data Models Section */}
+        <section id="models" className="docs-section">
+          <h2>Data models</h2>
+
+          <div className="model-section">
+            <h3>Upload model</h3>
             <div className="code-block">
-              <h4>Header Format</h4>
-              <pre><code>{`Authorization: Bearer <your-jwt-token>`}</code></pre>
-            </div>
-
-            <div className="auth-info">
-              <div className="auth-card">
-                <h4>Development Mode</h4>
-                <p>For local development, you can use the API key authentication:</p>
-                <pre><code>X-Api-Key: your-dev-api-key</code></pre>
-              </div>
-              <div className="auth-card">
-                <h4>Production</h4>
-                <p>Production requires valid Supabase JWT tokens obtained through the authentication flow.</p>
-              </div>
-            </div>
-          </section>
-
-          {/* Data Models Section */}
-          <section id="models" className="docs-section">
-            <h2>Data Models</h2>
-            
-            <div className="model-section">
-              <h3>Upload Model</h3>
-              <div className="code-block">
-                <pre><code>{`{
+              <pre>
+                <code>{`{
   "id": "8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d",
   "status": "queued",
   "original_filename": "team_meeting.mp3",
@@ -196,26 +261,45 @@ const ApiDocsPage = () => {
   "object_key": "uploads/8f2a2a2e...mp3",
   "created_at": "2025-09-28T14:03:12Z",
   "error_message": null
-}`}</code></pre>
-              </div>
-              <div className="field-descriptions">
-                <h4>Field Descriptions</h4>
-                <ul>
-                  <li><strong>id:</strong> Unique identifier for the upload (UUID)</li>
-                  <li><strong>status:</strong> Current processing status (queued, processing, done, error)</li>
-                  <li><strong>original_filename:</strong> Original name of the uploaded file</li>
-                  <li><strong>mime_type:</strong> MIME type of the uploaded file</li>
-                  <li><strong>object_key:</strong> Storage key in MinIO</li>
-                  <li><strong>created_at:</strong> Upload timestamp (ISO 8601)</li>
-                  <li><strong>error_message:</strong> Error details if status is "error"</li>
-                </ul>
-              </div>
+}`}</code>
+              </pre>
             </div>
+            <div className="field-descriptions">
+              <h4>Field descriptions</h4>
+              <ul>
+                <li>
+                  <strong>id:</strong> unique identifier for the upload (UUID)
+                </li>
+                <li>
+                  <strong>status:</strong> current processing status (queued,
+                  processing, done, error)
+                </li>
+                <li>
+                  <strong>original_filename:</strong> original name of the
+                  uploaded file
+                </li>
+                <li>
+                  <strong>mime_type:</strong> MIME type of the uploaded file
+                </li>
+                <li>
+                  <strong>object_key:</strong> storage key in MinIO
+                </li>
+                <li>
+                  <strong>created_at:</strong> upload timestamp (ISO 8601)
+                </li>
+                <li>
+                  <strong>error_message:</strong> error details if status is{" "}
+                  <code>"error"</code>
+                </li>
+              </ul>
+            </div>
+          </div>
 
-            <div className="model-section">
-              <h3>Transcript Model</h3>
-              <div className="code-block">
-                <pre><code>{`{
+          <div className="model-section">
+            <h3>Transcript model</h3>
+            <div className="code-block">
+              <pre>
+                <code>{`{
   "upload_id": "8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d",
   "language": "en",
   "text": "Full transcript text...",
@@ -232,14 +316,16 @@ const ApiDocsPage = () => {
     }
   ],
   "created_at": "2025-09-28T14:07:22Z"
-}`}</code></pre>
-              </div>
+}`}</code>
+              </pre>
             </div>
+          </div>
 
-            <div className="model-section">
-              <h3>Summary Model</h3>
-              <div className="code-block">
-                <pre><code>{`{
+          <div className="model-section">
+            <h3>Summary model</h3>
+            <div className="code-block">
+              <pre>
+                <code>{`{
   "upload_id": "8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d",
   "bullets": [
     {
@@ -257,103 +343,123 @@ const ApiDocsPage = () => {
     }
   ],
   "created_at": "2025-09-28T14:08:10Z"
-}`}</code></pre>
-              </div>
+}`}</code>
+              </pre>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* API Endpoints Section */}
-          <section id="endpoints" className="docs-section">
-            <h2>API Endpoints</h2>
-            
-            <div className="endpoint-section">
-              <div className="endpoint-header">
-                <span className="method post">POST</span>
-                <span className="endpoint-path">/v1/uploads</span>
-              </div>
-              <p>Upload a file for processing.</p>
-              
-              <h4>Headers</h4>
-              <ul>
-                <li><code>Authorization: Bearer &lt;token&gt;</code> (production)</li>
-                <li><code>Content-Type: multipart/form-data</code></li>
-              </ul>
+        {/* API Endpoints Section */}
+        <section id="endpoints" className="docs-section">
+          <h2>API endpoints</h2>
 
-              <h4>Body (multipart)</h4>
-              <ul>
-                <li><code>file</code>: the audio/video file (required)</li>
-                <li><code>title</code>: string (optional)</li>
-              </ul>
+          <div className="endpoint-section">
+            <div className="endpoint-header">
+              <span className="method post">POST</span>
+              <span className="endpoint-path">/v1/uploads</span>
+            </div>
+            <p>Upload a file for processing.</p>
 
-              <h4>Responses</h4>
-              <div className="response-section">
-                <div className="response-item">
-                  <span className="status-code success">200 OK</span>
-                  <div className="code-block small">
-                    <pre><code>{`{
+            <h4>Headers</h4>
+            <ul>
+              <li>
+                <code>Authorization: Bearer &lt;token&gt;</code> (production)
+              </li>
+              <li>
+                <code>Content-Type: multipart/form-data</code>
+              </li>
+            </ul>
+
+            <h4>Body (multipart)</h4>
+            <ul>
+              <li>
+                <code>file</code>: the audio/video file (required)
+              </li>
+              <li>
+                <code>title</code>: string (optional)
+              </li>
+            </ul>
+
+            <h4>Responses</h4>
+            <div className="response-section">
+              <div className="response-item">
+                <span className="status-code success">200 OK</span>
+                <div className="code-block small">
+                  <pre>
+                    <code>{`{
   "upload_id": "8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d",
   "status": "queued",
   "object_key": "uploads/..."
-}`}</code></pre>
-                  </div>
+}`}</code>
+                  </pre>
                 </div>
-                <div className="response-item">
-                  <span className="status-code error">400 Bad Request</span>
-                  <span>Empty file or over size/duration cap</span>
-                </div>
-                <div className="response-item">
-                  <span className="status-code error">502 Bad Gateway</span>
-                  <span>Storage transient error (MinIO)</span>
-                </div>
+              </div>
+              <div className="response-item">
+                <span className="status-code error">400 Bad Request</span>
+                <span>Empty file or over size/duration cap</span>
+              </div>
+              <div className="response-item">
+                <span className="status-code error">502 Bad Gateway</span>
+                <span>Storage transient error (MinIO)</span>
               </div>
             </div>
+          </div>
 
-            <div className="endpoint-section">
-              <div className="endpoint-header">
-                <span className="method get">GET</span>
-                <span className="endpoint-path">/v1/uploads/{"{upload_id}"}</span>
-              </div>
-              <p>Fetch status and metadata for an upload.</p>
-              
-              <h4>Parameters</h4>
-              <ul>
-                <li><code>upload_id</code>: UUID of the upload (path parameter)</li>
-              </ul>
+          <div className="endpoint-section">
+            <div className="endpoint-header">
+              <span className="method get">GET</span>
+              <span className="endpoint-path">
+                /v1/uploads/&lbrace;upload_id&rbrace;
+              </span>
+            </div>
+            <p>Fetch status and metadata for an upload.</p>
 
-              <h4>Responses</h4>
-              <div className="response-section">
-                <div className="response-item">
-                  <span className="status-code success">200 OK</span>
-                  <div className="code-block small">
-                    <pre><code>{`{
+            <h4>Parameters</h4>
+            <ul>
+              <li>
+                <code>upload_id</code>: UUID of the upload (path parameter)
+              </li>
+            </ul>
+
+            <h4>Responses</h4>
+            <div className="response-section">
+              <div className="response-item">
+                <span className="status-code success">200 OK</span>
+                <div className="code-block small">
+                  <pre>
+                    <code>{`{
   "id": "8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d",
   "status": "processing",
   "original_filename": "meeting.mp3",
   "mime_type": "audio/mpeg",
   "created_at": "2025-09-28T14:03:12Z"
-}`}</code></pre>
-                  </div>
+}`}</code>
+                  </pre>
                 </div>
-                <div className="response-item">
-                  <span className="status-code error">404 Not Found</span>
-                  <span>Unknown upload ID</span>
-                </div>
+              </div>
+              <div className="response-item">
+                <span className="status-code error">404 Not Found</span>
+                <span>Unknown upload ID</span>
               </div>
             </div>
+          </div>
 
-            <div className="endpoint-section">
-              <div className="endpoint-header">
-                <span className="method get">GET</span>
-                <span className="endpoint-path">/v1/uploads/{"{upload_id}"}/result</span>
-              </div>
-              <p>Return transcript and summary when ready.</p>
-              
-              <h4>Responses</h4>
-              <div className="response-section">
-                <div className="response-item">
-                  <span className="status-code success">200 OK</span>
-                  <div className="code-block small">
-                    <pre><code>{`{
+          <div className="endpoint-section">
+            <div className="endpoint-header">
+              <span className="method get">GET</span>
+              <span className="endpoint-path">
+                /v1/uploads/&lbrace;upload_id&rbrace;/result
+              </span>
+            </div>
+            <p>Return transcript and summary when ready.</p>
+
+            <h4>Responses</h4>
+            <div className="response-section">
+              <div className="response-item">
+                <span className="status-code success">200 OK</span>
+                <div className="code-block small">
+                  <pre>
+                    <code>{`{
   "transcript": {
     "language": "en",
     "text": "...",
@@ -363,37 +469,46 @@ const ApiDocsPage = () => {
     "bullets": [...],
     "action_items": [...]
   }
-}`}</code></pre>
-                  </div>
+}`}</code>
+                  </pre>
                 </div>
-                <div className="response-item">
-                  <span className="status-code pending">202 Accepted</span>
-                  <span>Still processing</span>
-                </div>
-                <div className="response-item">
-                  <span className="status-code error">409 Conflict</span>
-                  <span>Status not done</span>
-                </div>
+              </div>
+              <div className="response-item">
+                <span className="status-code pending">202 Accepted</span>
+                <span>Still processing</span>
+              </div>
+              <div className="response-item">
+                <span className="status-code error">409 Conflict</span>
+                <span>Status not done</span>
               </div>
             </div>
+          </div>
 
-            <div className="endpoint-section">
-              <div className="endpoint-header">
-                <span className="method get">GET</span>
-                <span className="endpoint-path">/v1/uploads</span>
-              </div>
-              <p>List uploads for the authenticated user.</p>
-              
-              <h4>Query Parameters</h4>
-              <ul>
-                <li><code>status</code>: Filter by status (queued, processing, done, error)</li>
-                <li><code>limit</code>: Number of items to return (default: 20)</li>
-                <li><code>before</code>: ISO timestamp for pagination</li>
-              </ul>
+          <div className="endpoint-section">
+            <div className="endpoint-header">
+              <span className="method get">GET</span>
+              <span className="endpoint-path">/v1/uploads</span>
+            </div>
+            <p>List uploads for the authenticated user.</p>
 
-              <h4>Response</h4>
-              <div className="code-block">
-                <pre><code>{`{
+            <h4>Query parameters</h4>
+            <ul>
+              <li>
+                <code>status</code>: filter by status (queued, processing, done,
+                error)
+              </li>
+              <li>
+                <code>limit</code>: number of items to return (default: 20)
+              </li>
+              <li>
+                <code>before</code>: ISO timestamp for pagination
+              </li>
+            </ul>
+
+            <h4>Response</h4>
+            <div className="code-block">
+              <pre>
+                <code>{`{
   "items": [
     {
       "id": "...",
@@ -401,91 +516,97 @@ const ApiDocsPage = () => {
       "created_at": "..."
     }
   ]
-}`}</code></pre>
+}`}</code>
+              </pre>
+            </div>
+          </div>
+        </section>
+
+        {/* Error Handling Section */}
+        <section id="errors" className="docs-section">
+          <h2>Error handling</h2>
+
+          <div className="error-codes-section">
+            <h3>HTTP status codes</h3>
+            <div className="status-grid">
+              <div className="status-item success">
+                <code>200</code>
+                <span>Success with body</span>
+              </div>
+              <div className="status-item success">
+                <code>201</code>
+                <span>Created</span>
+              </div>
+              <div className="status-item pending">
+                <code>202</code>
+                <span>Accepted (queued)</span>
+              </div>
+              <div className="status-item error">
+                <code>400</code>
+                <span>Bad input</span>
+              </div>
+              <div className="status-item error">
+                <code>401</code>
+                <span>Unauthorized</span>
+              </div>
+              <div className="status-item error">
+                <code>404</code>
+                <span>Not found</span>
+              </div>
+              <div className="status-item error">
+                <code>409</code>
+                <span>Conflict</span>
+              </div>
+              <div className="status-item error">
+                <code>422</code>
+                <span>Validation error</span>
+              </div>
+              <div className="status-item error">
+                <code>429</code>
+                <span>Rate limited</span>
+              </div>
+              <div className="status-item error">
+                <code>5xx</code>
+                <span>Server errors</span>
               </div>
             </div>
-          </section>
+          </div>
 
-          {/* Error Handling Section */}
-          <section id="errors" className="docs-section">
-            <h2>Error Handling</h2>
-            
-            <div className="error-codes-section">
-              <h3>HTTP Status Codes</h3>
-              <div className="status-grid">
-                <div className="status-item success">
-                  <code>200</code>
-                  <span>Success with body</span>
-                </div>
-                <div className="status-item success">
-                  <code>201</code>
-                  <span>Created</span>
-                </div>
-                <div className="status-item pending">
-                  <code>202</code>
-                  <span>Accepted (queued)</span>
-                </div>
-                <div className="status-item error">
-                  <code>400</code>
-                  <span>Bad input</span>
-                </div>
-                <div className="status-item error">
-                  <code>401</code>
-                  <span>Unauthorized</span>
-                </div>
-                <div className="status-item error">
-                  <code>404</code>
-                  <span>Not found</span>
-                </div>
-                <div className="status-item error">
-                  <code>409</code>
-                  <span>Conflict</span>
-                </div>
-                <div className="status-item error">
-                  <code>422</code>
-                  <span>Validation error</span>
-                </div>
-                <div className="status-item error">
-                  <code>429</code>
-                  <span>Rate limited</span>
-                </div>
-                <div className="status-item error">
-                  <code>5xx</code>
-                  <span>Server errors</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="error-format-section">
-              <h3>Error Response Format</h3>
-              <div className="code-block">
-                <pre><code>{`{
+          <div className="error-format-section">
+            <h3>Error response format</h3>
+            <div className="code-block">
+              <pre>
+                <code>{`{
   "error": {
     "code": "TooLarge",
     "message": "Max 1GB exceeded"
   }
-}`}</code></pre>
-              </div>
+}`}</code>
+              </pre>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* Examples Section */}
-          <section id="examples" className="docs-section">
-            <h2>Examples</h2>
-            
-            <div className="example-section">
-              <h3>Upload a File</h3>
-              <div className="code-block">
-                <h4>cURL</h4>
-                <pre><code>{`curl -X POST http://localhost:8000/v1/uploads \\
+        {/* Examples Section */}
+        <section id="examples" className="docs-section">
+          <h2>Examples</h2>
+
+          <div className="example-section">
+            <h3>Upload a file</h3>
+            <div className="code-block">
+              <h4>cURL</h4>
+              <pre>
+                <code>{`curl -X POST http://localhost:8000/v1/uploads \\
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
   -F "file=@meeting.mp3" \\
-  -F "title=Sprint Planning Meeting"`}</code></pre>
-              </div>
-              
-              <div className="code-block">
-                <h4>JavaScript (Fetch)</h4>
-                <pre><code>{`const formData = new FormData();
+  -F "title=Sprint Planning Meeting"`}</code>
+              </pre>
+            </div>
+
+            <div className="code-block">
+              <h4>JavaScript (fetch)</h4>
+              <pre>
+                <code>{`const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 formData.append('title', 'Sprint Planning Meeting');
 
@@ -498,44 +619,51 @@ const response = await fetch('http://localhost:8000/v1/uploads', {
 });
 
 const result = await response.json();
-console.log('Upload ID:', result.upload_id);`}</code></pre>
-              </div>
+console.log('Upload ID:', result.upload_id);`}</code>
+              </pre>
             </div>
+          </div>
 
-            <div className="example-section">
-              <h3>Check Upload Status</h3>
-              <div className="code-block">
-                <h4>cURL</h4>
-                <pre><code>{`curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  http://localhost:8000/v1/uploads/8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d`}</code></pre>
-              </div>
+          <div className="example-section">
+            <h3>Check upload status</h3>
+            <div className="code-block">
+              <h4>cURL</h4>
+              <pre>
+                <code>{`curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  http://localhost:8000/v1/uploads/8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d`}</code>
+              </pre>
             </div>
+          </div>
 
-            <div className="example-section">
-              <h3>Get Results</h3>
-              <div className="code-block">
-                <h4>cURL</h4>
-                <pre><code>{`curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
-  http://localhost:8000/v1/uploads/8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d/result`}</code></pre>
-              </div>
+          <div className="example-section">
+            <h3>Get results</h3>
+            <div className="code-block">
+              <h4>cURL</h4>
+              <pre>
+                <code>{`curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \\
+  http://localhost:8000/v1/uploads/8f2a2a2e-8b35-4e25-9d5e-6f9b5f8a6e7d/result`}</code>
+              </pre>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* OpenAPI Section */}
-          <section id="openapi" className="docs-section">
-            <h2>OpenAPI Specification</h2>
-            
-            <div className="openapi-info">
-              <p>
-                The complete OpenAPI specification is automatically generated by FastAPI and can be accessed 
-                when the backend server is running locally.
-              </p>
-            </div>
+        {/* OpenAPI Section */}
+        <section id="openapi" className="docs-section">
+          <h2>OpenAPI specification</h2>
 
-            <div className="sequence-diagram">
-              <h3>Sequence Diagram (Text Version)</h3>
-              <div className="code-block">
-                <pre><code>{`Client → API: POST /v1/uploads (file)
+          <div className="openapi-info">
+            <p>
+              The complete OpenAPI specification is automatically generated by
+              FastAPI and can be accessed when the backend server is running
+              locally.
+            </p>
+          </div>
+
+          <div className="sequence-diagram">
+            <h3>Sequence diagram (text version)</h3>
+            <div className="code-block">
+              <pre>
+                <code>{`Client → API: POST /v1/uploads (file)
 API → MinIO: put_object(file)
 API → DB: INSERT upload(status=queued)
 API → Queue: enqueue process_upload(upload_id)
@@ -548,22 +676,31 @@ Worker → GPT: summarize(transcript)
 Worker → DB: INSERT summary; UPDATE upload(status=done)
 
 Client → API: GET /v1/uploads/{id}
-Client → API: GET /v1/uploads/{id}/result`}</code></pre>
-              </div>
+Client → API: GET /v1/uploads/{id}/result`}</code>
+              </pre>
             </div>
-          </section>
-        </main>
-      </div>
+          </div>
+        </section>
+      </main>
 
-      {/* Scroll to Top Button */}
+      {/* Scroll to top button */}
       {showScrollTop && (
-        <button 
+        <button
           onClick={scrollToTop}
           className="scroll-to-top-btn"
           title="Scroll to top"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 15l-6-6-6 6"/>
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 15l-6-6-6 6" />
           </svg>
         </button>
       )}
