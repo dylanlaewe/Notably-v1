@@ -485,73 +485,37 @@ export default function MeetingDetailPage() {
     meetingName || (idShort ? `Meeting ${idShort}` : "Meeting");
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        background: "#020617",
-        color: "#e5e7eb",
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-      }}
-    >
-      {/* Header */}
-      <header
-        style={{
-          padding: "1rem 1.5rem",
-          borderBottom: "1px solid #111827",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "#020617",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>Notably</div>
-          <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
-            Meeting detail
-          </div>
-        </div>
-
-        <Link
-          to="/dashboard"
-          style={{
-            padding: "0.4rem 0.8rem",
-            borderRadius: "999px",
-            border: "1px solid #4b5563",
-            background: "transparent",
-            color: "#e5e7eb",
-            fontSize: "0.85rem",
-            textDecoration: "none",
-          }}
+        <div
+            style={{
+            minHeight: "100%",
+            display: "flex",
+            flexDirection: "column",
+            fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+            }}
         >
-          ← Back to dashboard
-        </Link>
-      </header>
+
 
       {/* Main content */}
-      <main
+        <main
         style={{
-          flex: 1,
-          padding: "1.5rem",
-          maxWidth: "960px",
-          width: "100%",
-          margin: "0 auto",
-          display: "grid",
-          gap: "1rem",
+            flex: 1,
+            padding: "0",
+            maxWidth: "960px",
+            width: "100%",
+            margin: "0 auto",
+            display: "grid",
+            gap: "1rem",
         }}
-      >
+        >
+
         {/* Heading */}
         <section
           style={{
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
             background:
-              "radial-gradient(circle at top left, #4f46e5 0, #020617 55%, #020617 100%)",
-            border: "1px solid #1f2937",
+              "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+            border: "1px solid rgba(34,197,94,0.35)",
           }}
         >
           <div
@@ -559,7 +523,7 @@ export default function MeetingDetailPage() {
               fontSize: "0.8rem",
               textTransform: "uppercase",
               letterSpacing: "0.1em",
-              color: "#c7d2fe",
+              color: "#bbf7d0",
               marginBottom: "0.25rem",
             }}
           >

@@ -11,6 +11,11 @@ export default function LoginPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const handleGoToSignup = () => {
+    navigate("/signup");
+  };
+
+
   // If already logged in (we have a token), bounce to dashboard
   useEffect(() => {
     if (isLoggedIn()) {
@@ -139,14 +144,52 @@ export default function LoginPage() {
         </form>
 
         {status && (
-          <p style={{ marginTop: "0.75rem", fontSize: "0.85rem", color: "#f97373" }}>
+          <p
+            style={{
+              marginTop: "0.75rem",
+              fontSize: "0.85rem",
+              color: "#f97373",
+            }}
+          >
             {status}
           </p>
         )}
 
-        <p style={{ marginTop: "1.5rem", fontSize: "0.8rem", color: "#64748b" }}>
+        <p
+          style={{
+            marginTop: "1.5rem",
+            fontSize: "0.8rem",
+            color: "#64748b",
+          }}
+        >
+          Don&apos;t have an account yet?{" "}
+          <button
+            type="button"
+            onClick={handleGoToSignup}
+            style={{
+              border: "none",
+              background: "none",
+              color: "#22c55e",
+              cursor: "pointer",
+              padding: 0,
+              fontSize: "0.8rem",
+              fontWeight: 500,
+            }}
+          >
+            Sign up
+          </button>
+        </p>
+
+        <p
+          style={{
+            marginTop: "0.5rem",
+            fontSize: "0.75rem",
+            color: "#64748b",
+          }}
+        >
           Use the same email & password you created in Supabase.
         </p>
+
       </div>
     </div>
   );

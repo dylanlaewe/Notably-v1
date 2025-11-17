@@ -1,11 +1,13 @@
 // web/src/pages/DashboardPage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/apiClient";
 import { clearAccessToken } from "../lib/authToken";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+
 
   // Auth ping
   const [status, setStatus] = useState("loading"); // "loading" | "ok" | "error"
@@ -25,6 +27,7 @@ export default function DashboardPage() {
   const [uploadStatus, setUploadStatus] = useState("idle"); // "idle" | "uploading" | "queued" | "error"
   const [uploadError, setUploadError] = useState("");
   const [uploadInfo, setUploadInfo] = useState(null); // last response from POST /v1/uploads
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Latest upload status (for polling)
   const [lastUploadId, setLastUploadId] = useState(null);
@@ -129,7 +132,7 @@ export default function DashboardPage() {
 
           items = items || [];
 
-          // 🟢 Try to enrich each meeting with its latest upload filename via /v1/uploads
+          // Try to enrich each meeting with its latest upload filename via /v1/uploads
           let enrichedItems = items;
           try {
             const uRes = await apiFetch("/v1/uploads?limit=500");
@@ -300,29 +303,58 @@ export default function DashboardPage() {
   // ------------------------
   // Handlers
   // ------------------------
-  const handleLogout = () => {
-    clearAccessToken();
-    navigate("/login", { replace: true });
+
+  const handleGoToSettings = () => {
+    navigate("/settings");
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+
+const handleDrop = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setIsDragOver(false);
+
+  const dt = e.dataTransfer;
+  if (!dt || !dt.files || dt.files.length === 0) return;
+
+  const file = dt.files[0];
+  if (!file) return;
+
+  setUploadFile(file);
+  setUploadStatus("idle");
+  setUploadError("");
+};
+
+const handleDragOver = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!isDragOver) {
+    setIsDragOver(true);
+  }
+};
+
+const handleDragLeave = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setIsDragOver(false);
+};
+
+const handleFileChange = (e) => {
+  const files = e.target?.files;
+  const file = files && files.length > 0 ? files[0] : null;
+
+  if (file) {
     setUploadFile(file);
     setUploadStatus("idle");
     setUploadError("");
-    // keep uploadInfo/lastUploadId separate; they describe last completed upload
-  };
+  } else {
+    setUploadFile(null);
+  }
+};
+
 
   const handleUpload = async (e) => {
     e.preventDefault();
-
-    const trimmedMeetingId = (uploadMeetingId || "").trim();
-
-    if (!trimmedMeetingId) {
-      setUploadError("Please select or enter a meeting ID first.");
-      setUploadStatus("error");
-      return;
-    }
 
     if (!uploadFile) {
       setUploadError("Please choose a file to upload.");
@@ -336,11 +368,60 @@ export default function DashboardPage() {
     setLastUploadPollError("");
     setLastUploadStatus(null);
 
-    const formData = new FormData();
-    formData.append("file", uploadFile);
-    formData.append("meeting_id", trimmedMeetingId);
+    let finalMeetingId = (uploadMeetingId || "").trim();
 
     try {
+      // If no meeting selected, create one automatically
+      if (!finalMeetingId) {
+        const createResp = await apiFetch("/v1/meetings", {
+          method: "POST",
+        });
+
+        if (createResp.status === 401) {
+          clearAccessToken();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        if (!createResp.ok) {
+          const text = await createResp.text();
+          throw new Error(`Create meeting failed: ${createResp.status} ${text}`);
+        }
+
+        const data = await createResp.json();
+        const newId =
+          data.id || data.meeting_id || data.meetingId || data.uuid;
+
+        if (!newId) {
+          throw new Error("Server did not return a meeting id");
+        }
+
+        finalMeetingId = String(newId);
+        setUploadMeetingId(finalMeetingId);
+
+        // Optimistically add new meeting to the list if it's not there yet
+        setMeetings((prev) => {
+          const exists = prev.some((m) => {
+            const mid =
+              m.id || m.meeting_id || m.meetingId || m.uuid || "";
+            return String(mid) === String(finalMeetingId);
+          });
+          if (exists) return prev;
+
+          return [
+            {
+              ...(data || {}),
+              id: newId,
+            },
+            ...prev,
+          ];
+        });
+      }
+
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      formData.append("meeting_id", finalMeetingId);
+
       const res = await apiFetch("/v1/uploads", {
         method: "POST",
         body: formData,
@@ -369,9 +450,27 @@ export default function DashboardPage() {
 
       setUploadInfo(body);
       setUploadStatus("queued");
+
       if (id) {
         setLastUploadId(id);
         setLastUploadStatus(body.status || "queued");
+      }
+
+      // Update latest filename in the meetings list if we can
+      if (finalMeetingId && body.filename) {
+        const key = String(finalMeetingId);
+        setMeetings((prev) =>
+          prev.map((m) => {
+            const mid =
+              m.id || m.meeting_id || m.meetingId || m.uuid || "";
+            if (String(mid) !== key) return m;
+            return {
+              ...m,
+              latest_upload_filename:
+                body.filename || m.latest_upload_filename,
+            };
+          })
+        );
       }
     } catch (err) {
       console.error("upload failed:", err);
@@ -381,6 +480,7 @@ export default function DashboardPage() {
       setUploadStatus("error");
     }
   };
+
 
   async function handleDeleteMeeting(id, label) {
   if (!id) return;
@@ -476,61 +576,22 @@ export default function DashboardPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "100%",
         display: "flex",
         flexDirection: "column",
-        background: "#020617",
-        color: "#e5e7eb",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      <header
-        style={{
-          padding: "1rem 1.5rem",
-          borderBottom: "1px solid #111827",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "#020617",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>Notably</div>
-          <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
-            Dashboard
-          </div>
-        </div>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: "0.4rem 0.8rem",
-            borderRadius: "999px",
-            border: "1px solid #4b5563",
-            background: "transparent",
-            color: "#e5e7eb",
-            fontSize: "0.85rem",
-            cursor: "pointer",
-          }}
-        >
-          Log out
-        </button>
-      </header>
-
       <main
         style={{
           flex: 1,
-          padding: "1.5rem",
+          padding: "0",
           maxWidth: "960px",
           width: "100%",
           margin: "0 auto",
-          display: "grid",
-          gap: "1rem",
         }}
       >
+
         {/* Auth status */}
         {status === "loading" && (
           <p style={{ color: "#9ca3af" }}>Checking your session…</p>
@@ -559,21 +620,24 @@ export default function DashboardPage() {
                 padding: "1rem 1.25rem",
                 borderRadius: "0.75rem",
                 background:
-                  "radial-gradient(circle at top left, #1d4ed8 0, #020617 50%, #020617 100%)",
-                border: "1px solid #1f2937",
+                  "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+                border: "1px solid rgba(34,197,94,0.35)",
               }}
             >
+
+
               <div
                 style={{
                   fontSize: "0.8rem",
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
-                  color: "#bfdbfe",
+                  color: "#bbf7d0", // was #bfdbfe
                   marginBottom: "0.25rem",
                 }}
               >
                 Signed in as
               </div>
+
               <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
                 {user.email || "unknown"}
               </div>
@@ -586,12 +650,7 @@ export default function DashboardPage() {
               >
                 user_id: <code>{user.user_id}</code>
               </div>
-              <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
-                dev: <code>{String(user.dev)}</code>
-              </div>
-              <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
-                sub: <code>{user.sub}</code>
-              </div>
+
             </section>
 
             {/* Uploads */}
@@ -614,11 +673,17 @@ export default function DashboardPage() {
               </h2>
 
               {/* Debug line so we can see what's going on */}
-              <p style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-                meetingsStatus: <code>{meetingsStatus}</code>, count:{" "}
-                <code>{meetings.length}</code>, selectedMeetingId:{" "}
-                <code>{uploadMeetingId || "(empty)"}</code>
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "#9ca3af",
+                  marginTop: "0.25rem",
+                }}
+              >
+                Drop a recording and we&apos;ll process it. If you don&apos;t
+                pick a meeting, we&apos;ll make a new one for you.
               </p>
+
 
               {meetingsStatus === "error" && (
                 <p
@@ -643,10 +708,11 @@ export default function DashboardPage() {
                     marginBottom: "0.5rem",
                   }}
                 >
-                  You don’t have any meetings yet. You can still manually type a
-                  meeting ID below (we’ll wire up “New meeting” later).
+                  You don&apos;t have any meetings yet. Upload a recording and
+                  we&apos;ll create your first meeting automatically.
                 </p>
               )}
+
 
               <form
                 onSubmit={handleUpload}
@@ -658,150 +724,43 @@ export default function DashboardPage() {
                   fontSize: "0.9rem",
                 }}
               >
-                {/* Meeting dropdown */}
-                <label
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.25rem",
-                  }}
-                >
-                  <span style={{ color: "#e5e7eb" }}>Meeting (from list)</span>
-                  <select
-                    value={
-                      meetings.length === 0
-                        ? ""
-                        : uploadMeetingId &&
-                          meetings.some((m) => {
-                            const id =
-                              m.id ||
-                              m.meeting_id ||
-                              m.meetingId ||
-                              m.uuid;
-                            return String(id) === String(uploadMeetingId);
-                          })
-                        ? uploadMeetingId
-                        : ""
-                    }
-                    onChange={(e) => setUploadMeetingId(e.target.value)}
-                    disabled={meetings.length === 0}
-                    style={{
-                      background: "#020617",
-                      color: "#e5e7eb",
-                      borderRadius: "0.5rem",
-                      border: "1px solid #374151",
-                      padding: "0.4rem 0.5rem",
-                    }}
-                  >
-                    {meetings.length === 0 && (
-                      <option value="">No meetings available</option>
-                    )}
-                    {meetings.length > 0 && (
-                      <option value="">– Select a meeting –</option>
-                    )}
-                    {meetings.map((m) => {
-                      const id =
-                        m.id ||
-                        m.meeting_id ||
-                        m.meetingId ||
-                        m.uuid ||
-                        "";
-                      const name =
-                        m.title ||
-                        m.name ||
-                        m.topic ||
-                        (id
-                          ? `Meeting ${String(id).slice(0, 8)}…`
-                          : "Meeting");
-                      return (
-                        <option key={id || name} value={id}>
-                          {name}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
 
-                {/* Explicit meeting ID text box */}
-                <label
+              {/* Simple file input */}
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.4rem",
+                }}
+              >
+                <span style={{ color: "#e5e7eb" }}>Recording</span>
+                <input
+                  type="file"
+                  accept="audio/*,video/*"
+                  onChange={handleFileChange}
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.25rem",
-                  }}
-                >
-                  <span style={{ color: "#e5e7eb" }}>
-                    Meeting ID (used for upload)
-                  </span>
-                  <input
-                    type="text"
-                    value={uploadMeetingId}
-                    onChange={(e) => setUploadMeetingId(e.target.value)}
-                    placeholder="Paste or type a meeting ID"
-                    style={{
-                      background: "#020617",
-                      color: "#e5e7eb",
-                      borderRadius: "0.5rem",
-                      border: "1px solid #374151",
-                      padding: "0.4rem 0.5rem",
-                      fontFamily:
-                        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                      fontSize: "0.85rem",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#9ca3af",
-                    }}
-                  >
-                    Tip: copy the ID from “My meetings” below and paste it here.
-                  </span>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const mid = (uploadMeetingId || "").trim();
-                    if (!mid) return; // no-op if empty; could also show a small message
-                    navigate(`/meetings/${mid}`);
-                  }}
-                  style={{
-                    alignSelf: "flex-start",
-                    padding: "0.3rem 0.8rem",
-                    borderRadius: "999px",
-                    border: "1px solid #374151",
-                    background: "transparent",
+                    fontSize: "0.85rem",
                     color: "#e5e7eb",
-                    fontSize: "0.8rem",
-                    cursor: uploadMeetingId ? "pointer" : "default",
-                    marginBottom: "0.25rem",
                   }}
-                >
-                  View meeting by ID →
-                </button>
-
-
-
-                {/* File input */}
-                <label
+                />
+                <div
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.25rem",
+                    fontSize: "0.8rem",
+                    color: "#9ca3af",
                   }}
                 >
-                  <span style={{ color: "#e5e7eb" }}>Audio file</span>
-                  <input
-                    type="file"
-                    accept="audio/*,video/*"
-                    onChange={handleFileChange}
-                    style={{
-                      color: "#e5e7eb",
-                      fontSize: "0.9rem",
-                    }}
-                  />
-                </label>
+                  {uploadFile ? (
+                    <>
+                      Selected: <code>{uploadFile.name}</code>
+                    </>
+                  ) : (
+                    "Max 60 minutes, up to 1 GB. Audio or video is fine."
+                  )}
+                </div>
+              </label>
+
+
+
 
                 {uploadStatus === "error" && uploadError && (
                   <div
@@ -843,7 +802,10 @@ export default function DashboardPage() {
                     borderRadius: "999px",
                     border: "none",
                     background:
-                      uploadStatus === "uploading" ? "#4b5563" : "#2563eb",
+                      uploadStatus === "uploading"
+                        ? "#4b5563"
+                        : "linear-gradient(135deg, #22c55e, #16a34a)",
+
                     color: "#e5e7eb",
                     fontSize: "0.9rem",
                     fontWeight: 500,
@@ -973,7 +935,10 @@ export default function DashboardPage() {
                 style={{
                   padding: "0.25rem 0.7rem",
                   borderRadius: "999px",
-                  border: "1px solid #374151",
+                  border:
+                    createStatus === "creating"
+                      ? "1px solid #4b5563"
+                      : "1px solid #22c55e",
                   background:
                     createStatus === "creating" ? "#4b5563" : "transparent",
                   color: "#e5e7eb",
@@ -984,6 +949,7 @@ export default function DashboardPage() {
               >
                 {createStatus === "creating" ? "Creating…" : "New meeting"}
               </button>
+
             </div>
 
               {createError && (
