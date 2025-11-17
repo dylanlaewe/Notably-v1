@@ -121,22 +121,68 @@ export default function AppShell({ children }) {
               <div className="app-shell-sidebar-section-title">
                 Navigation
               </div>
-              <nav className="app-shell-nav">
-                {navItems.map((item) => (
-                  <NavLink
-                    key={item.key}
-                    to={item.to}
-                    end={item.to === "/dashboard"}
+                <nav className="app-shell-nav">
+                <NavLink
+                    to="/dashboard"
                     className={({ isActive }) =>
-                      "app-shell-nav-item" +
-                      (isActive ? " app-shell-nav-item-active" : "")
+                    "app-shell-nav-item" +
+                    (isActive ? " app-shell-nav-item-active" : "")
                     }
-                  >
+                >
                     <span className="app-shell-nav-dot" />
-                    <span className="app-shell-nav-label">{item.label}</span>
-                  </NavLink>
-                ))}
-              </nav>
+                    <span className="app-shell-nav-label">My meetings</span>
+                </NavLink>
+
+                {/* API docs with hover dropdown */}
+                <div className="app-shell-nav-item-wrapper">
+                    <NavLink
+                    to="/api-docs"
+                    className={({ isActive }) =>
+                        "app-shell-nav-item" +
+                        (isActive ? " app-shell-nav-item-active" : "")
+                    }
+                    >
+                    <span className="app-shell-nav-dot" />
+                    <span className="app-shell-nav-label">API documentation</span>
+                    </NavLink>
+
+                    <div className="app-shell-subnav">
+                    <a href="/api-docs#overview" className="app-shell-subnav-link">
+                        Overview
+                    </a>
+                    <a href="/api-docs#auth" className="app-shell-subnav-link">
+                        Authentication
+                    </a>
+                    <a href="/api-docs#models" className="app-shell-subnav-link">
+                        Data models
+                    </a>
+                    <a href="/api-docs#endpoints" className="app-shell-subnav-link">
+                        Endpoints
+                    </a>
+                    <a href="/api-docs#errors" className="app-shell-subnav-link">
+                        Errors
+                    </a>
+                    <a href="/api-docs#examples" className="app-shell-subnav-link">
+                        Examples
+                    </a>
+                    <a href="/api-docs#openapi" className="app-shell-subnav-link">
+                        OpenAPI spec
+                    </a>
+                    </div>
+                </div>
+
+                <NavLink
+                    to="/faq"
+                    className={({ isActive }) =>
+                    "app-shell-nav-item" +
+                    (isActive ? " app-shell-nav-item-active" : "")
+                    }
+                >
+                    <span className="app-shell-nav-dot" />
+                    <span className="app-shell-nav-label">FAQ</span>
+                </NavLink>
+                </nav>
+
             </div>
 
             {/* Account section at bottom, ChatGPT-style */}
