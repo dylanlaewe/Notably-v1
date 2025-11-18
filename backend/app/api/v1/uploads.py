@@ -83,6 +83,10 @@ def minio_enabled() -> bool:
     return os.getenv("MINIO_ENABLE", "false").lower() == "true"
 
 
+def _log_upload(msg: str) -> None:
+    # Keep it simple: print to console; if you want, you can copy the NOTABLY_LOG_FILE pattern
+    print(f"[uploads] {msg}", flush=True)
+
 # ---------------------------
 # Response models
 # ---------------------------
@@ -209,10 +213,17 @@ async def create_upload(
     meeting_id: str = Form(...),
     duration_sec: typing.Optional[float] = Form(None),
     db: Session = Depends(get_session),
-    user: UserContext = Depends (require_user),
+    user: UserContext = Depends(require_user),
     background_tasks: BackgroundTasks = None,
 ):
-    # read once
+    def _log_upload(msg: str) -> None:
+        print(f"[uploads] {msg}", flush=True)
+
+    _log_upload("create_upload called")
+
+    # -------------------------
+    # 1) Read file + basic checks
+    # -------------------------
     blob = await file.read()
     if not blob:
         raise HTTPException(status_code=422, detail="empty file")
@@ -223,119 +234,125 @@ async def create_upload(
     if duration_sec is not None and duration_sec > 3600:
         raise HTTPException(status_code=422, detail="duration exceeds 60 minutes")
 
-    # in-memory dedupe (keeps stub compatibility)
-    key = (meeting_id, sha)
-    if key in _INDEX:
-        uid = _INDEX[key]
-        rec = _UPLOADS[uid]
-        return UploadCreateResp(upload_id=rec.id, status=rec.status)
+    _log_upload(f"file read ok, bytes={byte_size}, sha={sha[:12]}..., meeting_id={meeting_id}")
 
-    # DB-level idempotency first
+    # -------------------------
+    # 2) DB-level idempotency: reuse existing upload if same meeting+sha
+    # -------------------------
     existing = db.query(Upload).filter(
         Upload.meeting_id == meeting_id,
         Upload.sha256 == sha,
     ).first()
     if existing:
+        _log_upload(f"found existing Upload id={existing.id} status={existing.status}")
         return UploadCreateResp(upload_id=existing.id, status=existing.status)
 
-    # create in-memory record (status queued; no inline result)
+    # -------------------------
+    # 3) Create Upload row in DB
+    # -------------------------
     uid = str(uuid.uuid4())
     created = _now_utc()
-    rec = _UploadRec(
+
+    db_row = Upload(
         id=uid,
         meeting_id=meeting_id,
         filename=file.filename or "upload.bin",
         mime_type=file.content_type or "application/octet-stream",
         byte_size=byte_size,
         sha256=sha,
-        status="queued",
-        created_at=_iso(created),
-        retained_until=_iso(created + timedelta(days=90)),
-        segments=[],
-        bullets=[],
-        action_items=[],
-        duration_sec=duration_sec,
-    )
-    _UPLOADS[uid] = rec
-    _INDEX[key] = uid
-
-    # DB row as queued (no transcript/summary yet)
-    db_row = Upload(
-        id=uid,
-        meeting_id=meeting_id,
-        filename=rec.filename,
-        mime_type=rec.mime_type,
-        byte_size=rec.byte_size,
-        sha256=rec.sha256,
         duration_sec=duration_sec,
         status="queued",
         error=None,
         created_at=created,
         retained_until=created + timedelta(days=90),
     )
+
     try:
         db.add(db_row)
         db.commit()
+        _log_upload(f"inserted Upload id={uid} status=queued")
     except IntegrityError:
         db.rollback()
         existing = db.query(Upload).filter(
             Upload.meeting_id == meeting_id, Upload.sha256 == sha
         ).first()
         if existing:
+            _log_upload(
+                f"race on Upload; returning existing id={existing.id} status={existing.status}"
+            )
             return UploadCreateResp(upload_id=existing.id, status=existing.status)
         raise
 
-    # Ensure the meeting is assigned to caller's team (idempotent)
+    # -------------------------
+    # 4) Ensure meeting exists + attached to user's default team
+    # -------------------------
     ensure_meeting_exists(db, meeting_id)
     team_id = get_or_create_default_team(db, user.user_id)
     assign_meeting_team_if_empty(db, meeting_id, team_id)
+    _log_upload(f"meeting ensured + assigned to team_id={team_id}")
 
-    # assign meeting to user's default team if empty        
-    # Optional: push raw blob to MinIO
+    # -------------------------
+    # 5) Optional: push raw blob to MinIO
+    # -------------------------
     if minio_enabled():
         try:
             client = get_minio_client()
             bucket = ensure_bucket(client)
-            object_key = make_object_key(meeting_id, uid, rec.filename)
+            object_key = make_object_key(meeting_id, uid, file.filename or "upload.bin")
 
             client.put_object(
                 bucket,
                 object_key,
                 data=BytesIO(blob),
                 length=byte_size,
-                content_type=rec.mime_type,
+                content_type=file.content_type or "application/octet-stream",
             )
-            # record where we put it
+            _log_upload(f"MinIO put_object bucket={bucket} key={object_key}")
+
             obj = UploadObject(
                 upload_id=uid,
                 bucket=bucket,
                 object_key=object_key,
-                content_type=rec.mime_type,
-                byte_size=rec.byte_size,
-                sha256=rec.sha256,
+                content_type=file.content_type or "application/octet-stream",
+                byte_size=byte_size,
+                sha256=sha,
             )
             db.add(obj)
             db.commit()
+            _log_upload(f"UploadObject row created id={obj.id}")
         except Exception as e:
-            # mark failed and surface an error
             u = db.get(Upload, uid)
             if u:
                 u.status = "failed"
                 u.error = f"minio: {e}"
                 db.add(u)
                 db.commit()
+            _log_upload(f"MinIO error: {e}")
             raise HTTPException(status_code=500, detail="storage error")
-
-    # enqueue background processor to flip to processing -> done and write results
-    if RQ_ENABLE:
-        q = get_queue()
-        q.enqueue(process_stub, uid, meeting_id)
     else:
-        if background_tasks is None:
-            raise HTTPException(status_code=500, detail="background task unavailable")
-        background_tasks.add_task(_process_stub, uid, meeting_id)
+        _log_upload("MINIO_ENABLE is false; skipping MinIO upload")
+
+    # -------------------------
+    # 6) STRICT: RQ must be enabled; no stub path
+    # -------------------------
+    from backend.app.queue import RQ_ENABLE, get_queue
+    from backend.app.tasks import process_stub
+
+    _log_upload(f"RQ_ENABLE in create_upload={RQ_ENABLE!r}")
+
+    if not RQ_ENABLE:
+        # Force you into Route A: if env isn't set, fail loudly.
+        raise HTTPException(
+            status_code=500,
+            detail="RQ_ENABLE is false; server must run with RQ_ENABLE=true to process uploads",
+        )
+
+    q = get_queue()
+    job = q.enqueue(process_stub, uid, meeting_id)
+    _log_upload(f"enqueued process_stub job.id={getattr(job, 'id', None)} uid={uid} meeting_id={meeting_id}")
 
     return UploadCreateResp(upload_id=uid, status="queued")
+
 
 
 @router.get("/uploads/{upload_id}", response_model=UploadStatusResp)

@@ -147,6 +147,7 @@ def list_meetings(
             select
               m.id,
               m.created_at,
+              m.name
               (
                 select u.filename
                 from upload u
@@ -179,6 +180,7 @@ def list_meetings(
                 "id": mid,
                 "created_at": created_at.isoformat() if created_at else None,
                 "latest_upload_filename": row.get("latest_upload_filename"),
+                "name": row.get("name"),
             }
         )
 
@@ -188,6 +190,9 @@ def list_meetings(
         "offset": offset,
         "items": items,
     }
+
+class MeetingUpdateReq(BaseModel):
+    name: Optional[str] = None
 
 
 class MeetingCreateResp(BaseModel):
@@ -217,6 +222,30 @@ def create_meeting(
     assign_meeting_team_if_empty(db, meeting_id, team_id)
 
     return MeetingCreateResp(id=meeting_id)
+
+@router.patch("/meetings/{meeting_id}")
+def update_meeting(
+    meeting_id: str,
+    payload: MeetingUpdateReq,
+    user: UserContext = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update mutable fields on a meeting (currently just `name`).
+    """
+    # Ensure user can see this meeting
+    _ = get_visible_meeting_or_404(db, user.user_id, meeting_id)
+
+    new_name = (payload.name or "").strip() or None
+
+    db.execute(
+        text("UPDATE meeting SET name = :name WHERE id = :mid"),
+        {"name": new_name, "mid": meeting_id},
+    )
+    db.commit()
+
+    return {"id": meeting_id, "name": new_name}
+
 
 @router.delete("/meetings/{meeting_id}", status_code=204)
 def delete_meeting(
