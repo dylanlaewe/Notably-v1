@@ -1148,6 +1148,93 @@ input:checked + .slider:before {
   background: #00ff88;
 }
 
+/* Clickable meeting card */
+.meeting-card {
+  list-style: none;
+  background: #020617;
+  border: 1px solid #1f2937;
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.5rem;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.06s ease;
+  cursor: pointer;
+}
+
+.meeting-card:hover {
+  background: #064e3b;             /* deep green-ish */
+  border-color: #10b981;           /* emerald border */
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+
+.meeting-card:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+/* Three-dot trigger */
+.meeting-menu-trigger {
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0.1rem 0.25rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meeting-menu-trigger:hover {
+  background: #0b1120;
+  color: #e5e7eb;
+}
+
+/* Dropdown menu */
+.meeting-menu {
+  position: absolute;
+  right: 0;
+  top: 120%;
+  background: #020617;
+  border: 1px solid #1f2937;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  padding: 0.25rem 0;
+  /* no fixed minWidth so it hugs contents */
+}
+
+.meeting-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.8rem;
+  background: transparent;
+  border: none;
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.meeting-menu-item:hover {
+  background: #111827; /* highlight on hover */
+}
+
+.meeting-menu-item-danger {
+  color: #f97373;
+}
+
+.meeting-menu-item-danger:hover {
+  background: #111827;
+}
+
 /* Bottom sidebar */
 .bottom-sidebar {
   position: fixed;
@@ -1550,3 +1637,4 @@ input:checked + .slider:before {
     transform: translateY(0) scale(1);
   }
 }
+

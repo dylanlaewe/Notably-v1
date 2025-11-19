@@ -39,6 +39,14 @@ export default function DashboardPage() {
   const [deleteError, setDeleteError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
+  // Meeting renaming
+  const [menuOpenId, setMenuOpenId] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameError, setRenameError] = useState("");
+  const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
+
+
+
 
   // ------------------------
   // Initial load: auth ping + meetings
@@ -187,18 +195,7 @@ export default function DashboardPage() {
           setMeetingsStatus("ok");
 
           // Default the uploadMeetingId to first meeting (use enrichedItems)
-          if (!uploadMeetingId && enrichedItems.length > 0) {
-            const first = enrichedItems[0];
-            const id =
-              first.id ||
-              first.meeting_id ||
-              first.meetingId ||
-              first.uuid ||
-              "";
-            if (id) {
-              setUploadMeetingId(String(id));
-            }
-          }
+
         }
 
       } catch (err) {
@@ -352,8 +349,13 @@ const handleFileChange = (e) => {
   }
 };
 
+const handleOpenMeeting = (id) => {
+    if (!id) return;
+    navigate(`/meetings/${id}`);
+  };
 
-  const handleUpload = async (e) => {
+
+const handleUpload = async (e) => {
     e.preventDefault();
 
     if (!uploadFile) {
@@ -368,59 +370,58 @@ const handleFileChange = (e) => {
     setLastUploadPollError("");
     setLastUploadStatus(null);
 
-    let finalMeetingId = (uploadMeetingId || "").trim();
-
     try {
-      // If no meeting selected, create one automatically
-      if (!finalMeetingId) {
-        const createResp = await apiFetch("/v1/meetings", {
-          method: "POST",
-        });
+      // 🔹 ALWAYS create a fresh meeting for this upload
+      const createResp = await apiFetch("/v1/meetings", {
+        method: "POST",
+      });
 
-        if (createResp.status === 401) {
-          clearAccessToken();
-          navigate("/login", { replace: true });
-          return;
-        }
-
-        if (!createResp.ok) {
-          const text = await createResp.text();
-          throw new Error(`Create meeting failed: ${createResp.status} ${text}`);
-        }
-
-        const data = await createResp.json();
-        const newId =
-          data.id || data.meeting_id || data.meetingId || data.uuid;
-
-        if (!newId) {
-          throw new Error("Server did not return a meeting id");
-        }
-
-        finalMeetingId = String(newId);
-        setUploadMeetingId(finalMeetingId);
-
-        // Optimistically add new meeting to the list if it's not there yet
-        setMeetings((prev) => {
-          const exists = prev.some((m) => {
-            const mid =
-              m.id || m.meeting_id || m.meetingId || m.uuid || "";
-            return String(mid) === String(finalMeetingId);
-          });
-          if (exists) return prev;
-
-          return [
-            {
-              ...(data || {}),
-              id: newId,
-            },
-            ...prev,
-          ];
-        });
+      if (createResp.status === 401) {
+        clearAccessToken();
+        navigate("/login", { replace: true });
+        return;
       }
 
+      if (!createResp.ok) {
+        const text = await createResp.text();
+        throw new Error(
+          `Create meeting failed: ${createResp.status} ${text}`
+        );
+      }
+
+      const data = await createResp.json();
+      const newId =
+        data.id || data.meeting_id || data.meetingId || data.uuid;
+
+      if (!newId) {
+        throw new Error("Server did not return a meeting id");
+      }
+
+      const newMeetingId = String(newId);
+
+      // 🔹 Optimistically add the new meeting at the TOP of the list
+      setMeetings((prev) => {
+        const prevList = prev || [];
+        const exists = prevList.some((m) => {
+          const mid =
+            m.id || m.meeting_id || m.meetingId || m.uuid || "";
+          return String(mid) === newMeetingId;
+        });
+        if (exists) return prevList;
+
+        return [
+          {
+            ...(data || {}),
+            id: newId,
+          },
+          ...prevList,
+        ];
+      });
+
+      // 🔹 Now upload the file and attach it to this new meeting
       const formData = new FormData();
       formData.append("file", uploadFile);
-      formData.append("meeting_id", finalMeetingId);
+      formData.append("meeting_id", newMeetingId);
 
       const res = await apiFetch("/v1/uploads", {
         method: "POST",
@@ -456,11 +457,11 @@ const handleFileChange = (e) => {
         setLastUploadStatus(body.status || "queued");
       }
 
-      // Update latest filename in the meetings list if we can
-      if (finalMeetingId && body.filename) {
-        const key = String(finalMeetingId);
+      // 🔹 Update the filename shown on that new meeting row
+      if (body.filename) {
+        const key = newMeetingId;
         setMeetings((prev) =>
-          prev.map((m) => {
+          (prev || []).map((m) => {
             const mid =
               m.id || m.meeting_id || m.meetingId || m.uuid || "";
             if (String(mid) !== key) return m;
@@ -479,7 +480,8 @@ const handleFileChange = (e) => {
       );
       setUploadStatus("error");
     }
-  };
+};
+
 
 
   async function handleDeleteMeeting(id, label) {
@@ -517,6 +519,68 @@ const handleFileChange = (e) => {
     setDeletingId(null);
   }
 }
+
+  async function handleRenameMeeting(id, currentLabel) {
+    if (!id) return;
+
+    const initial = currentLabel || "";
+    const next = window.prompt("Rename meeting", initial);
+
+    // User hit cancel
+    if (next === null) return;
+
+    const trimmed = next.trim();
+
+    // Allow clearing the name (falls back to filename in UI)
+    // If you want to forbid empty, uncomment this:
+    // if (!trimmed) return;
+
+    try {
+      setRenameError("");
+      setRenamingId(id);
+
+      const res = await apiFetch(`/v1/meetings/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: trimmed || null }),
+      });
+
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const body = await res.json();
+          detail = body.detail || JSON.stringify(body);
+        } catch {
+          // ignore
+        }
+        const msg = detail || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      // Optimistically update in local state
+      setMeetings((prev) =>
+        (prev || []).map((m) => {
+          const mid =
+            m.id || m.meeting_id || m.meetingId || m.uuid || "";
+          if (String(mid) !== String(id)) return m;
+          return {
+            ...m,
+            name: trimmed || null,
+          };
+        })
+      );
+    } catch (err) {
+      console.error("Failed to rename meeting", err);
+      setRenameError(
+        err?.message || "Failed to rename meeting. Please try again."
+      );
+    } finally {
+      setRenamingId(null);
+      setMenuOpenId(null);
+    }
+  }
 
 
   async function handleCreateMeeting() {
@@ -1048,17 +1112,45 @@ const handleFileChange = (e) => {
                         m.topic ||
                         `Meeting ${id.slice(0, 8)}…`;
 
+                      const isHovered = hoveredMeetingId === id;
+
                       return (
                         <li
                           key={id}
+                          onClick={() => handleOpenMeeting(id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleOpenMeeting(id);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          onMouseEnter={() => setHoveredMeetingId(id)}
+                          onMouseLeave={() => setHoveredMeetingId(null)}
                           style={{
-                            padding: "0.6rem 0.75rem",
-                            borderRadius: "0.5rem",
-                            border: "1px solid #111827",
-                            background: "#020617",
+                            listStyle: "none",
+                            background: isHovered ? "#064e3b" : "#020617",
+                            border: `1px solid ${isHovered ? "#10b981" : "#1f2937"}`,
+                            borderRadius: "0.75rem",
+                            padding: "0.75rem 0.85rem",
+                            marginBottom: "0.75rem",
+                            cursor: "pointer",
+                            boxShadow: isHovered
+                              ? "0 0 0 1px rgba(16, 185, 129, 0.35)"
+                              : "none",
+                            transform: isHovered ? "translateY(-1px)" : "none",
+                            transition:
+                              "background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease",
+                          }}
+                        >
+
+                        <div
+                          style={{
                             display: "flex",
-                            flexDirection: "column",
-                            gap: "0.25rem",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
                           }}
                         >
                           <div
@@ -1066,10 +1158,127 @@ const handleFileChange = (e) => {
                               fontSize: "0.95rem",
                               fontWeight: 500,
                               color: "#e5e7eb",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
                             }}
+                            title={name}
                           >
                             {name}
                           </div>
+
+                          {/* 3-dot menu */}
+                          <div style={{ position: "relative" }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation(); // don't trigger card click
+                                setMenuOpenId((prev) => (prev === id ? null : id));
+                              }}
+                              aria-label="Meeting options"
+                              style={{
+                                border: "none",
+                                background: "transparent",
+                                padding: 0,
+                                margin: 0,
+                                cursor: "pointer",
+                                color: "#9ca3af",
+                                fontSize: "1.05rem",
+                                lineHeight: 1,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = "#e5e7eb";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = "#9ca3af";
+                              }}
+                            >
+                              <span style={{ transform: "translateY(-1px)" }}>⋮</span>
+                            </button>
+
+                            {menuOpenId === id && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: "absolute",
+                                  right: 0,
+                                  top: "120%",
+                                  background: "#020617",
+                                  border: "1px solid #1f2937",
+                                  borderRadius: "0.5rem",
+                                  boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+                                  padding: "0.25rem 0",
+                                  zIndex: 20,
+                                  display: "inline-block",
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleRenameMeeting(id, name)}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    textAlign: "left",
+                                    padding: "0.35rem 0.85rem",
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "#e5e7eb",
+                                    fontSize: "0.85rem",
+                                    cursor: "pointer",
+                                    whiteSpace: "nowrap",
+                                    transition:
+                                      "background 0.08s ease, transform 0.06s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = "#111827";
+                                    e.currentTarget.style.transform = "translateY(-0.5px)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "transparent";
+                                    e.currentTarget.style.transform = "translateY(0)";
+                                  }}
+                                >
+                                  {renamingId === id ? "Renaming…" : "Rename"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMeeting(id, name)}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    textAlign: "left",
+                                    padding: "0.35rem 0.85rem",
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "#f97373",
+                                    fontSize: "0.85rem",
+                                    cursor: "pointer",
+                                    whiteSpace: "nowrap",
+                                    transition:
+                                      "background 0.08s ease, transform 0.06s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = "#111827";
+                                    e.currentTarget.style.transform = "translateY(-0.5px)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "transparent";
+                                    e.currentTarget.style.transform = "translateY(0)";
+                                  }}
+                                >
+                                  {deletingId === id ? "Deleting…" : "Delete"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+
+
 
                           <div
                             style={{
@@ -1105,46 +1314,7 @@ const handleFileChange = (e) => {
                               gap: "0.5rem",
                             }}
                           >
-                            {/* View button */}
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/meetings/${id}`)}
-                              style={{
-                                padding: "0.25rem 0.7rem",
-                                borderRadius: "999px",
-                                border: "1px solid #374151",
-                                background: "transparent",
-                                color: "#e5e7eb",
-                                fontSize: "0.8rem",
-                                cursor: "pointer",
-                              }}
-                            >
-                              View meeting →
-                            </button>
 
-                            {/* Delete button (red trashcan) */}
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMeeting(id, name)}
-                              disabled={deletingId === id}
-                              style={{
-                                padding: "0.25rem 0.7rem",
-                                borderRadius: "999px",
-                                border: "1px solid #7f1d1d",
-                                background: deletingId === id ? "#7f1d1d" : "transparent",
-                                color: "#fecaca",
-                                fontSize: "0.8rem",
-                                cursor: deletingId === id ? "default" : "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "0.25rem",
-                              }}
-                            >
-                              <span role="img" aria-label="Delete">
-                                🗑️
-                              </span>
-                              {deletingId === id ? "Deleting…" : "Delete"}
-                            </button>
                           </div>
 
                         </li>

@@ -15,19 +15,33 @@ router = APIRouter(prefix="/v1/my", tags=["my"])
 
 @router.get("/meetings")
 def list_my_meetings(
+    limit: int = 50,
     user: UserContext = Depends(require_user),
     db: Session = Depends(get_session),
-):
+) -> List[Dict[str, Any]]:
     """
-    Return a simple list of meetings.
+    Return a simple list of meetings for the current user/dev env.
 
-    For this MVP we just list all rows from `meeting`, ordered by id
-    (most recent first). Per-meeting access control is enforced by the
-    /v1/meetings/{meeting_id}/… endpoints, so this is fine for local/dev.
+    For now we just:
+      - read from `meeting`
+      - order newest first
+      - cap to `limit` (default 50)
     """
-    rows = db.execute(
-        text("select id, team_id from meeting order by id desc limit 50")
-    ).mappings().all()
+    rows = (
+        db.execute(
+            text(
+                """
+                SELECT id, team_id, created_at
+                FROM meeting
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        )
+        .mappings()
+        .all()
+    )
 
     out: List[Dict[str, Any]] = []
     for r in rows:
@@ -39,6 +53,7 @@ def list_my_meetings(
                     if "team_id" in r and r["team_id"] is not None
                     else None
                 ),
+                "created_at": r.get("created_at"),
             }
         )
     return out

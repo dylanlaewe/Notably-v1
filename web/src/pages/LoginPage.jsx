@@ -187,7 +187,7 @@ export default function LoginPage() {
             color: "#64748b",
           }}
         >
-          Use the same email & password you created in Supabase.
+          We take notes. You take credit.
         </p>
 
       </div>
