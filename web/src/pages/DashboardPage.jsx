@@ -1073,78 +1073,82 @@ const handleUpload = async (e) => {
               )}
 
               {meetingsStatus === "ok" && meetings.length > 0 && (
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      padding: 0,
-                      margin: 0,
-                      display: "grid",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    {meetings.map((m) => {
-                      const id =
-                        m.id ||
-                        m.meeting_id ||
-                        m.meetingId ||
-                        m.uuid ||
-                        "unknown-id";
+                <ul
+                  style={{
+                    listStyle: "none",
+                    padding: 0,
+                    margin: 0,
+                    display: "grid",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {meetings.map((m) => {
+                    const id =
+                      m.id ||
+                      m.meeting_id ||
+                      m.meetingId ||
+                      m.uuid ||
+                      "unknown-id";
 
-                      const created =
-                        m.created_at || m.createdAt || m.created || null;
+                    const created =
+                      m.created_at || m.createdAt || m.created || null;
 
-                      // 👇 NEW: prefer the latest upload filename as the display name
-                      const rawFilename =
-                        m.latest_upload_filename ||
-                        m.filename ||
-                        m.file_name ||
-                        m.fileName ||
-                        null;
+                    // Prefer the latest upload filename as the base label
+                    const rawFilename =
+                      m.latest_upload_filename ||
+                      m.filename ||
+                      m.file_name ||
+                      m.fileName ||
+                      null;
 
-                      const baseName = rawFilename
-                        ? rawFilename.replace(/\.[^/.]+$/, "") // strip extension
-                        : null;
+                    const filenameLabel = rawFilename
+                      ? rawFilename.replace(/\.[^/.]+$/, "") // strip extension
+                      : null;
 
-                      const name =
-                        baseName ||
-                        m.title ||
-                        m.name ||
-                        m.topic ||
-                        `Meeting ${id.slice(0, 8)}…`;
+                    // Final title:
+                    // 1) explicit meeting name (renamed)
+                    // 2) base filename
+                    // 3) other text fallbacks
+                    const displayTitle =
+                      (m.name && m.name.trim()) ||
+                      filenameLabel ||
+                      m.title ||
+                      m.topic ||
+                      `Meeting ${id.slice(0, 8)}…`;
 
-                      const isHovered = hoveredMeetingId === id;
+                    const isHovered = hoveredMeetingId === id;
 
-                      return (
-                        <li
-                          key={id}
-                          onClick={() => handleOpenMeeting(id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleOpenMeeting(id);
-                            }
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          onMouseEnter={() => setHoveredMeetingId(id)}
-                          onMouseLeave={() => setHoveredMeetingId(null)}
-                          style={{
-                            listStyle: "none",
-                            background: isHovered ? "#064e3b" : "#020617",
-                            border: `1px solid ${isHovered ? "#10b981" : "#1f2937"}`,
-                            borderRadius: "0.75rem",
-                            padding: "0.75rem 0.85rem",
-                            marginBottom: "0.75rem",
-                            cursor: "pointer",
-                            boxShadow: isHovered
-                              ? "0 0 0 1px rgba(16, 185, 129, 0.35)"
-                              : "none",
-                            transform: isHovered ? "translateY(-1px)" : "none",
-                            transition:
-                              "background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease",
-                          }}
-                        >
-
+                    return (
+                      <li
+                        key={id}
+                        onClick={() => handleOpenMeeting(id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleOpenMeeting(id);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onMouseEnter={() => setHoveredMeetingId(id)}
+                        onMouseLeave={() => setHoveredMeetingId(null)}
+                        style={{
+                          listStyle: "none",
+                          background: isHovered ? "#064e3b" : "#020617",
+                          border: `1px solid ${isHovered ? "#10b981" : "#1f2937"}`,
+                          borderRadius: "0.75rem",
+                          padding: "0.75rem 0.85rem",
+                          marginBottom: "0.75rem",
+                          cursor: "pointer",
+                          boxShadow: isHovered
+                            ? "0 0 0 1px rgba(16, 185, 129, 0.35)"
+                            : "none",
+                          transform: isHovered ? "translateY(-1px)" : "none",
+                          transition:
+                            "background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease",
+                        }}
+                      >
+                        {/* Header row: title + 3-dot menu */}
                         <div
                           style={{
                             display: "flex",
@@ -1162,9 +1166,9 @@ const handleUpload = async (e) => {
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
                             }}
-                            title={name}
+                            title={displayTitle}
                           >
-                            {name}
+                            {displayTitle}
                           </div>
 
                           {/* 3-dot menu */}
@@ -1217,7 +1221,9 @@ const handleUpload = async (e) => {
                               >
                                 <button
                                   type="button"
-                                  onClick={() => handleRenameMeeting(id, name)}
+                                  onClick={() =>
+                                    handleRenameMeeting(id, displayTitle)
+                                  }
                                   style={{
                                     display: "block",
                                     width: "100%",
@@ -1234,11 +1240,13 @@ const handleUpload = async (e) => {
                                   }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.background = "#111827";
-                                    e.currentTarget.style.transform = "translateY(-0.5px)";
+                                    e.currentTarget.style.transform =
+                                      "translateY(-0.5px)";
                                   }}
                                   onMouseLeave={(e) => {
                                     e.currentTarget.style.background = "transparent";
-                                    e.currentTarget.style.transform = "translateY(0)";
+                                    e.currentTarget.style.transform =
+                                      "translateY(0)";
                                   }}
                                 >
                                   {renamingId === id ? "Renaming…" : "Rename"}
@@ -1246,7 +1254,9 @@ const handleUpload = async (e) => {
 
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteMeeting(id, name)}
+                                  onClick={() =>
+                                    handleDeleteMeeting(id, displayTitle)
+                                  }
                                   style={{
                                     display: "block",
                                     width: "100%",
@@ -1263,11 +1273,13 @@ const handleUpload = async (e) => {
                                   }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.background = "#111827";
-                                    e.currentTarget.style.transform = "translateY(-0.5px)";
+                                    e.currentTarget.style.transform =
+                                      "translateY(-0.5px)";
                                   }}
                                   onMouseLeave={(e) => {
                                     e.currentTarget.style.background = "transparent";
-                                    e.currentTarget.style.transform = "translateY(0)";
+                                    e.currentTarget.style.transform =
+                                      "translateY(0)";
                                   }}
                                 >
                                   {deletingId === id ? "Deleting…" : "Delete"}
@@ -1275,55 +1287,43 @@ const handleUpload = async (e) => {
                               </div>
                             )}
                           </div>
-
                         </div>
 
-
-
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "#9ca3af",
-                              display: "flex",
-                              gap: "0.5rem",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {rawFilename && (
-                              <span>
-                                file: <code>{rawFilename}</code>
-                              </span>
-                            )}
+                        {/* Metadata row */}
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#9ca3af",
+                            display: "flex",
+                            gap: "0.5rem",
+                            flexWrap: "wrap",
+                            marginTop: "0.35rem",
+                          }}
+                        >
+                          {rawFilename && (
                             <span>
-                              id: <code>{id}</code>
+                              file: <code>{rawFilename}</code>
                             </span>
-                            {created && (
-                              <span>
-                                created:{" "}
-                                <code>
-                                  {String(created).replace("T", " ").slice(0, 19)}
-                                </code>
-                              </span>
-                            )}
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: "0.15rem",
-                              display: "flex",
-                              gap: "0.5rem",
-                            }}
-                          >
-
-                          </div>
-
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-
-
+                          )}
+                          <span>
+                            id: <code>{id}</code>
+                          </span>
+                          {created && (
+                            <span>
+                              created:{" "}
+                              <code>
+                                {String(created)
+                                  .replace("T", " ")
+                                  .slice(0, 19)}
+                              </code>
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
           </>
         )}
@@ -1331,5 +1331,4 @@ const handleUpload = async (e) => {
     </div>
   );
 }
-
-
+              
