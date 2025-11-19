@@ -1,5 +1,5 @@
 // web/src/pages/MeetingDetailPage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { apiFetch, getApiBaseUrl } from "../lib/apiClient";
 import { clearAccessToken } from "../lib/authToken";
@@ -35,20 +35,26 @@ export default function MeetingDetailPage() {
   // PDF export state
   const [pdfStatus, setPdfStatus] = useState("idle"); // "idle" | "downloading" | "error"
   const [pdfError, setPdfError] = useState(null);
+
+  // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchStatus, setSearchStatus] = useState("idle"); // "idle" | "loading" | "ok" | "error"
   const [searchError, setSearchError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
+  const [segmentMetaById, setSegmentMetaById] = useState({});
+  const [activeSegmentId, setActiveSegmentId] = useState(null);
+  const audioRef = useRef(null);
 
 
-    function handleDownloadPdf() {
+
+  function handleDownloadPdf() {
     if (!meetingId) return;
     const base = getApiBaseUrl();
     const url = `${base}/v1/exports/pdf?meeting_id=${meetingId}`;
     window.open(url, "_blank");
   }
 
-    function handleDownloadMarkdown() {
+  function handleDownloadMarkdown() {
     if (!meetingId) return;
     const base = getApiBaseUrl();
     const url = `${base}/v1/exports/markdown?meeting_id=${meetingId}`;
@@ -97,6 +103,34 @@ export default function MeetingDetailPage() {
     }
 
     return parts;
+  }
+
+  function handleJumpToSegment(segmentIdRaw) {
+    if (!segmentIdRaw) return;
+
+    const segmentId = String(segmentIdRaw);
+    setActiveSegmentId(segmentId);
+
+    // Scroll transcript into view
+    const el = document.getElementById(`seg-${segmentId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    // Nudge audio to that time if we know it
+    const meta = segmentMetaById[segmentId];
+    if (
+      meta &&
+      typeof meta.startSeconds === "number" &&
+      audioRef.current
+    ) {
+      try {
+        audioRef.current.currentTime = meta.startSeconds;
+        audioRef.current.play().catch(() => {});
+      } catch {
+        // ignore autoplay errors
+      }
+    }
   }
 
 
@@ -532,6 +566,57 @@ export default function MeetingDetailPage() {
   }, [meetingId, navigate]);
 
 
+  useEffect(() => {
+    if (!transcript || !Array.isArray(transcript.items)) {
+      setSegmentMetaById({});
+      return;
+    }
+
+    const meta = {};
+
+    const formatTime = (sec) => {
+      if (sec == null || isNaN(sec)) return "0:00";
+      const total = Math.max(0, Math.floor(sec));
+      const mins = Math.floor(total / 60);
+      const secs = total % 60;
+      const mm = String(mins).padStart(1, "0");
+      const ss = String(secs).padStart(2, "0");
+      return `${mm}:${ss}`;
+    };
+
+  transcript.items.forEach((seg, index) => {
+    const key = String(seg.id);
+
+    const rawStart =
+      seg.t_start_seconds ?? seg.t_start ?? seg.start ?? 0;
+    const rawEnd =
+      seg.t_end_seconds ?? seg.t_end ?? seg.end ?? rawStart;
+
+    const startSeconds =
+      typeof rawStart === "number"
+        ? rawStart
+        : parseFloat(rawStart) || 0;
+
+    const endSeconds =
+      typeof rawEnd === "number"
+        ? rawEnd
+        : parseFloat(rawEnd) || startSeconds;
+
+    meta[key] = {
+      index,
+      startLabel: formatTime(startSeconds),
+      endLabel: formatTime(endSeconds),
+      startSeconds,
+      endSeconds,
+    };
+  });
+
+
+    setSegmentMetaById(meta);
+  }, [transcript]);
+
+
+  
   const idShort = meetingId ? String(meetingId).slice(0, 8) : "";
   const displayMeetingName =
     meetingName || (idShort ? `Meeting ${idShort}` : "Meeting");
@@ -614,7 +699,12 @@ export default function MeetingDetailPage() {
               >
                 Recording{audioFilename ? ` · ${audioFilename}` : ""}
               </div>
-              <audio controls src={audioUrl} style={{ width: "100%" }} />
+                <audio
+                  ref={audioRef}
+                  controls
+                  src={audioUrl}
+                  style={{ width: "100%" }}
+                />
             </div>
           )}
           {audioStatus === "loading" && (
@@ -789,25 +879,80 @@ export default function MeetingDetailPage() {
                     fontSize: "0.9rem",
                   }}
                 >
-                  {summary.bullets.map((b) => (
-                    <li key={b.id}>
-                      <span>{b.text}</span>
-                      {b.citations && b.citations.length > 0 && (
-                        <span
-                          style={{ fontSize: "0.75rem", color: "#9ca3af" }}
-                        >
-                          {" "}
-                          · cites segment{" "}
-                          {b.citations
-                            .map((c) => c.segment_id)
-                            .filter(Boolean)
-                            .join(", ")}
-                        </span>
-                      )}
-                    </li>
-                  ))}
+
+                  {summary.bullets.map((b) => {
+
+                    const hasSingleSegment =
+                      transcript &&
+                      Array.isArray(transcript.items) &&
+                      transcript.items.length === 1;
+
+                    const citations = Array.isArray(b.citations)
+                      ? b.citations
+                      : [];
+
+                    // Pick the first citation that we can map to a segment
+                    let primaryMeta = null;
+                    let primarySegmentId = null;
+
+                    for (const c of citations) {
+                      const key = String(c.segment_id);
+                      const meta = segmentMetaById[key];
+                      if (meta) {
+                        primaryMeta = meta;
+                        primarySegmentId = key; // already string
+                        break;
+                      }
+                    }
+
+
+                    let citationLabel = "";
+                    if (primaryMeta) {
+                      if (hasSingleSegment) {
+                        citationLabel = `full recording (${primaryMeta.startLabel} → ${primaryMeta.endLabel})`;
+                    } else {
+                      const indexLabel = primaryMeta.index + 1; // human 1-based
+                      citationLabel = `Segment ${indexLabel} (${primaryMeta.startLabel} → ${primaryMeta.endLabel})`;
+                    }
+                  }
+                    return (
+                      <li key={b.id}>
+                        <span>{b.text}</span>
+                        {primaryMeta && primarySegmentId && (
+                          <button
+                            type="button"
+                            onClick={() => handleJumpToSegment(primarySegmentId)}
+                            style={{
+                              marginLeft: "0.35rem",
+                              border: "none",
+                              background: "transparent",
+                              padding: "0.1rem 0.35rem",
+                              borderRadius: "999px",
+                              fontSize: "0.75rem",
+                              color: "#a7f3d0",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.15rem",
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: "0.45rem",
+                                height: "0.45rem",
+                                borderRadius: "999px",
+                                backgroundColor: "#10b981",
+                              }}
+                            />
+                            <span>cites {citationLabel}</span>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
+
 
             {summary &&
               (!summary.bullets || summary.bullets.length === 0) && (
@@ -993,52 +1138,68 @@ export default function MeetingDetailPage() {
             )}
 
             {transcript &&
-              transcript.items &&
+              Array.isArray(transcript.items) &&
               transcript.items.length > 0 && (
                 <div
                   style={{
+                    marginTop: "0.75rem",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "0.35rem",
-                    fontSize: "0.9rem",
-                    maxHeight: "360px",
-                    overflowY: "auto",
-                    paddingRight: "0.25rem",
+                    gap: "0.45rem",
                   }}
                 >
-                  {transcript.items.map((seg) => (
-                    <div
-                      key={seg.id}
-                      style={{
-                        padding: "0.45rem 0.55rem",
-                        borderRadius: "0.5rem",
-                        border: "1px solid #111827",
-                        background: "#020617",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "0.1rem",
-                      }}
-                    >
+                  {transcript.items.map((seg) => {
+                    const metaKey = String(seg.id);
+                    const meta = segmentMetaById[metaKey];
+                    const isActive = activeSegmentId === metaKey;
+
+                    const startLabel = meta ? meta.startLabel : "0:00";
+                    const endLabel = meta ? meta.endLabel : "0:00";
+                    const numberLabel = meta ? meta.index + 1 : seg.id;
+
+                    return (
                       <div
+                        key={seg.id}
+                        id={`seg-${metaKey}`}
                         style={{
-                          fontSize: "0.75rem",
-                          color: "#9ca3af",
+                          padding: "0.45rem 0.55rem",
+                          borderRadius: "0.5rem",
+                          border: isActive
+                            ? "1px solid #10b981"
+                            : "1px solid #111827",
+                          background: isActive
+                            ? "rgba(16,185,129,0.08)"
+                            : "#020617",
                           display: "flex",
-                          gap: "0.5rem",
-                          flexWrap: "wrap",
+                          flexDirection: "column",
+                          gap: "0.1rem",
+                          boxShadow: isActive
+                            ? "0 0 0 1px rgba(16,185,129,0.35)"
+                            : "none",
+                          transition:
+                            "background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease",
                         }}
                       >
-                        <span>
-                          #{seg.id} ·{" "}
-                          {seg.t_start_str ?? seg.t_start ?? 0}s →{" "}
-                          {seg.t_end_str ?? seg.t_end ?? 0}s
-                        </span>
+                        <div
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "#9ca3af",
+                            display: "flex",
+                            gap: "0.5rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span>
+                            Segment {numberLabel} · {startLabel} → {endLabel}
+                          </span>
+                        </div>
+                        <div>{seg.text}</div>
                       </div>
-                      <div>{seg.text}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
+
 
             {transcript &&
               (!transcript.items || transcript.items.length === 0) && (
