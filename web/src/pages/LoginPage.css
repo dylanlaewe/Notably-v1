@@ -1,218 +1,289 @@
-/* LoginPage.css - Clean separation of styles */
-
-/* Main container - full viewport coverage */
+/* Root auth page wrapper */
 .login-page {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: var(--bg-primary);
-  overflow: hidden;
-  transition: background-color 0.3s ease;
+  min-height: 100vh;
+  width: 100%;
+  padding: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+  color: #e5e7eb;
+
+  background: radial-gradient(
+      circle at top,
+      rgba(34, 197, 94, 0.22) 0,
+      rgba(15, 23, 42, 1) 40%,
+      #020617 75%
+    ),
+    #020617;
 }
 
-/* Center wrapper for absolute positioning */
+/* Light theme override */
+.login-page[data-theme="light"] {
+  color: #0f172a;
+  background: radial-gradient(
+      circle at top,
+      rgba(34, 197, 94, 0.12) 0,
+      #f3f4f6 40%,
+      #f9fafb 80%
+    ),
+    #f9fafb;
+}
+
+/* Centering container */
 .login-center-wrapper {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: auto;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
 }
 
-/* Main content container */
+/* Main 2-column-ish layout (brand + card) */
 .login-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 2rem;
+  align-items: stretch;
+  justify-content: center;
 }
 
-/* Branding section container */
+/* On wider screens, make it side-by-side */
+@media (min-width: 900px) {
+  .login-content {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .login-branding {
+    flex: 1.1;
+  }
+
+  .login-card {
+    flex: 1;
+    max-width: 420px;
+  }
+}
+
+/* Branding / left side */
 .login-branding {
-  width: 600px;
-  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
 }
 
-/* Logo section */
 .login-logo-section {
-  text-align: center;
-  margin-bottom: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .login-logo {
-  height: 150px;
+  height: 32px;
   width: auto;
-  max-width: 600px;
-  display: block;
-  margin: 0 auto;
+  border-radius: 0.5rem;
 }
 
-/* Slogan text */
-.login-slogan {
-  color: #888888;
-  font-size: 18px;
-  font-weight: 400;
-  letter-spacing: 0.5px;
-  text-align: center;
-  margin: 0;
-}
-
-/* Main login card */
-.login-card {
-  width: 600px;
-  background: linear-gradient(to bottom, #1A1A1A 0%, #0F0F0F 100%);
-  border: 2px solid rgba(0, 255, 136, 0.3);
-  border-radius: 16px;
-  padding: 64px;
-  text-align: center;
-}
-
-/* Sign In title */
-.login-title {
-  font-size: 2.25rem;
+/* If you ever add text next to the logo, it will sit nicely */
+.login-logo-section span {
+  font-size: 0.95rem;
   font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 48px;
-  text-align: center;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #bbf7d0;
 }
 
-/* Form styling */
-.login-form {
-  text-align: center;
+.login-slogan {
+  margin: 0;
+  max-width: 360px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: #9ca3af;
 }
 
-.login-form > div {
-  margin-bottom: 24px;
+.login-page[data-theme="light"] .login-slogan {
+  color: #6b7280;
 }
 
-/* Input field styling */
-.login-input {
-  height: 54px;
-  border-radius: 8px;
-  background-color: #0A0A0A;
-  border: 1.5px solid #2A2A2A;
-  padding-left: 16px;
-  padding-right: 16px;
-  font-size: 16px;
-  color: #FFFFFF;
+/* Main auth card */
+.login-card {
   width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
-  display: block;
-  transition: border-color 0.3s ease;
+  max-width: 420px;
+  padding: 1.75rem 1.9rem;
+  border-radius: 0.9rem;
+  background: rgba(2, 6, 23, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-sizing: border-box;
+}
+
+.login-page[data-theme="light"] .login-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+}
+
+/* Titles / headings */
+.login-title {
+  text-align: center;
+  margin: 0 0 0.75rem 0;
+  font-size: 1.35rem;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: #e5e7eb;
+}
+
+.login-page[data-theme="light"] .login-title {
+  color: #0f172a;
+}
+
+/* Form */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Inputs */
+.login-input {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.6rem;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.login-input::placeholder {
+  color: #6b7280;
 }
 
 .login-input:focus {
   outline: none;
-  border-color: #00FF88;
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4);
 }
 
-.login-input::placeholder {
-  color: #666666;
+/* Light theme input tweaks */
+.login-page[data-theme="light"] .login-input {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  color: #111827;
 }
 
-/* Forgot password section */
-.login-forgot-password {
-  text-align: right;
-  margin-bottom: 32px;
+.login-page[data-theme="light"] .login-input::placeholder {
+  color: #9ca3af;
 }
 
-.login-forgot-btn {
-  color: #888888;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-/* Sign in button */
+/* Primary button */
 .login-signin-btn {
-  height: 56px;
-  border-radius: 28px;
-  background-color: #00FF88;
-  color: #0A0A0A;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  border: none;
-  cursor: pointer;
+  margin-top: 0.5rem;
   width: 100%;
-  transition: all 0.3s ease;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+  color: #f9fafb;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease,
+    opacity 0.12s ease;
 }
 
-.login-signin-btn:hover {
-  opacity: 0.9;
+.login-signin-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(34, 197, 94, 0.45);
+  filter: brightness(1.04);
+}
+
+.login-signin-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
 }
 
 .login-signin-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  opacity: 0.65;
+  cursor: default;
+  box-shadow: none;
 }
 
-/* Signup link section */
-.login-signup-link {
-  text-align: center;
-  margin-top: 32px;
-  font-size: 15px;
-}
-
+/* "Don't have an account?" row */
 .login-signup-text {
-  color: #888888;
-}
-
-.login-signup-btn {
-  color: #00FF88;
-  font-weight: 600;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-/* Success screen styles */
-.login-success-container {
-  min-height: 100vh;
-  background: #000000;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: #9ca3af;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.login-success-card {
-  background: linear-gradient(to bottom, #1A1A1A 0%, #0F0F0F 100%);
-  border: 2px solid rgba(0, 255, 136, 0.3);
-  border-radius: 16px;
-  padding: 64px;
-  text-align: center;
-  max-width: 400px;
+.login-page[data-theme="light"] .login-signup-text {
+  color: #6b7280;
 }
 
-.login-success-title {
-  font-size: 1.875rem;
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 24px;
-}
-
-.login-success-message {
-  color: #9CA3AF;
-  margin-bottom: 32px;
-}
-
-.login-logout-btn {
-  height: 56px;
-  border-radius: 28px;
-  background-color: #00FF88;
-  color: #0A0A0A;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 1px;
+/* Secondary link button */
+.login-signup-btn {
   border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #a7f3d0;
   cursor: pointer;
-  width: 100%;
-  transition: all 0.3s ease;
+  text-decoration: none;
+  transition:
+    color 0.12s ease,
+    transform 0.08s ease;
 }
 
-.login-logout-btn:hover {
-  opacity: 0.9;
+.login-signup-btn:hover {
+  color: #6ee7b7;
+  transform: translateY(-0.5px);
+}
+
+.login-signup-btn:active {
+  transform: translateY(0);
+}
+
+/* Tiny helper text under the card buttons */
+.login-helper-text {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: center;
+}
+
+.login-page[data-theme="light"] .login-helper-text {
+  color: #6b7280;
+}
+
+/* Center card variant (mostly for clarity / future tweaking) */
+.login-card-centered {
+  margin: 0 auto;
+}
+
+/* Logo above the card content, centered */
+.login-logo-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.login-slogan-center {
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
 }
