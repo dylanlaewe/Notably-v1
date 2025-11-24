@@ -1,9 +1,11 @@
+// web/src/pages/SettingsPage.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
 import { apiFetch } from "../lib/apiClient";
 import { clearAccessToken } from "../lib/authToken";
 import { supabase } from "../lib/supabaseClient";
+import "./AppPage.css";
 import "./SettingsPage.css";
 
 const STORAGE_PROFILE_KEY = "notably-profile";
@@ -260,15 +262,7 @@ const SettingsPage = () => {
       : "?";
 
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily:
-          "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
+    <div className="app-page" data-theme={theme}>
       <main
         className="settings-content"
         style={{
@@ -282,6 +276,7 @@ const SettingsPage = () => {
         }}
       >
         <div
+          className="settings-shell"
           style={{
             marginTop: "1.5rem",
             marginBottom: "1.5rem",
@@ -290,16 +285,18 @@ const SettingsPage = () => {
             display: "flex",
             gap: "1.25rem",
             borderRadius: "0.75rem",
-            border: "1px solid #111827",
-            background: "#020617",
+            border: "1px solid var(--settings-shell-border, #111827)",
+            background: "var(--settings-shell-bg, #020617)",
             padding: "1rem 1.25rem",
           }}
         >
           {/* Left side: account + tab nav (ChatGPT-style) */}
           <aside
+            className="settings-aside"
             style={{
               width: "230px",
-              borderRight: "1px solid #111827",
+              borderRight:
+                "1px solid var(--settings-aside-border, var(--settings-shell-border, #111827))",
               paddingRight: "1rem",
               display: "flex",
               flexDirection: "column",
@@ -351,7 +348,7 @@ const SettingsPage = () => {
                   <div
                     style={{
                       fontSize: "0.8rem",
-                      color: "#9ca3af",
+                      color: "var(--settings-muted, #9ca3af)",
                     }}
                   >
                     {displayEmail || "loading…"}
@@ -361,7 +358,7 @@ const SettingsPage = () => {
               <p
                 style={{
                   fontSize: "0.75rem",
-                  color: "#6b7280",
+                  color: "var(--settings-subtle, #6b7280)",
                   marginTop: "0.25rem",
                 }}
               >
@@ -382,7 +379,9 @@ const SettingsPage = () => {
               </button>
               <button
                 type="button"
-                className={`tab-btn ${activeTab === "preferences" ? "active" : ""}`}
+                className={`tab-btn ${
+                  activeTab === "preferences" ? "active" : ""
+                }`}
                 onClick={() => setActiveTab("preferences")}
               >
                 <span className="tab-btn-icon">⭐</span>
@@ -404,7 +403,7 @@ const SettingsPage = () => {
               <p
                 style={{
                   fontSize: "0.9rem",
-                  color: "#9ca3af",
+                  color: "var(--settings-muted, #9ca3af)",
                 }}
               >
                 Loading your settings…
@@ -447,6 +446,7 @@ const SettingsPage = () => {
                           style={{
                             fontSize: "1.05rem",
                             marginBottom: "0.25rem",
+                            color: "var(--section-heading, #16a34a)",
                           }}
                         >
                           Profile
@@ -454,7 +454,7 @@ const SettingsPage = () => {
                         <p
                           style={{
                             fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            color: "var(--settings-muted, #9ca3af)",
                           }}
                         >
                           Your name is used only inside Notably. Your email
@@ -479,16 +479,10 @@ const SettingsPage = () => {
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label">EMAIL</label>
                         <div
+                          className="form-input form-input-readonly"
                           style={{
-                            height: "54px",
-                            borderRadius: "0.5rem",
-                            border: "1.5px solid #111827",
-                            background: "#020617",
                             display: "flex",
                             alignItems: "center",
-                            padding: "0 0.75rem",
-                            fontSize: "0.9rem",
-                            color: "#e5e7eb",
                           }}
                         >
                           {displayEmail || "Unknown email"}
@@ -514,6 +508,7 @@ const SettingsPage = () => {
                           style={{
                             fontSize: "1.05rem",
                             marginBottom: "0.25rem",
+                            color: "var(--section-heading, #16a34a)",
                           }}
                         >
                           Appearance
@@ -521,7 +516,7 @@ const SettingsPage = () => {
                         <p
                           style={{
                             fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            color: "var(--settings-muted, #9ca3af)",
                           }}
                         >
                           Switch between light and dark modes. This applies to
@@ -574,6 +569,7 @@ const SettingsPage = () => {
                           style={{
                             fontSize: "1.05rem",
                             marginBottom: "0.25rem",
+                            color: "var(--section-heading, #16a34a)",
                           }}
                         >
                           Change password
@@ -581,7 +577,7 @@ const SettingsPage = () => {
                         <p
                           style={{
                             fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            color: "var(--settings-muted, #9ca3af)",
                           }}
                         >
                           Update the password for your Supabase account.
@@ -644,39 +640,18 @@ const SettingsPage = () => {
                         </div>
 
                         {passwordError && (
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "#fecaca",
-                              background: "#450a0a",
-                              padding: "0.4rem 0.6rem",
-                              borderRadius: "0.5rem",
-                              marginTop: "0.25rem",
-                            }}
-                          >
+                          <div className="settings-alert settings-alert-error">
                             {passwordError}
                           </div>
                         )}
 
                         {passwordSuccess && (
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "#bbf7d0",
-                              background: "#064e3b",
-                              padding: "0.4rem 0.6rem",
-                              borderRadius: "0.5rem",
-                              marginTop: "0.25rem",
-                            }}
-                          >
+                          <div className="settings-alert settings-alert-success">
                             {passwordSuccess}
                           </div>
                         )}
 
-                        <div
-                          className="form-actions"
-                          style={{ marginTop: "0.5rem" }}
-                        >
+                        <div className="form-actions" style={{ marginTop: "0.5rem" }}>
                           <button
                             type="submit"
                             className="save-btn"
@@ -710,6 +685,7 @@ const SettingsPage = () => {
                           style={{
                             fontSize: "1.05rem",
                             marginBottom: "0.25rem",
+                            color: "var(--section-heading, #16a34a)",
                           }}
                         >
                           Language
@@ -717,7 +693,7 @@ const SettingsPage = () => {
                         <p
                           style={{
                             fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            color: "var(--settings-muted, #9ca3af)",
                           }}
                         >
                           Choose your preferred interface language. (Content is
@@ -762,6 +738,7 @@ const SettingsPage = () => {
                           style={{
                             fontSize: "1.05rem",
                             marginBottom: "0.25rem",
+                            color: "var(--section-heading, #16a34a)",
                           }}
                         >
                           Notifications
@@ -769,7 +746,7 @@ const SettingsPage = () => {
                         <p
                           style={{
                             fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            color: "var(--settings-muted, #9ca3af)",
                           }}
                         >
                           Control how Notably contacts you. Email notifications

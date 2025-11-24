@@ -1,19 +1,53 @@
 // web/src/pages/MeetingDetailPage.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { apiFetch, getApiBaseUrl } from "../lib/apiClient";
 import { clearAccessToken } from "../lib/authToken";
+import { useTheme } from "../contexts/ThemeContext";
+import "./AppPage.css";
 
 export default function MeetingDetailPage() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+
+  const isLight = theme === "light";
+
+  const colors = {
+    // card containers
+    cardBg: isLight ? "#ffffff" : "#020617",
+    cardBorder: isLight ? "#e5e7eb" : "#111827",
+
+    // softer header-ish card
+    heroBg: isLight
+      ? "radial-gradient(circle at top left, rgba(34,197,94,0.08) 0, #f9fafb 55%, #f9fafb 100%)"
+      : "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+    heroBorder: isLight
+      ? "1px solid rgba(148,163,184,0.6)"
+      : "1px solid rgba(34,197,94,0.35)",
+
+    // text
+    muted: isLight ? "#6b7280" : "#9ca3af",
+
+    // error/message colors
+    errorBg: isLight ? "#fee2e2" : "#450a0a",
+    errorText: isLight ? "#b91c1c" : "#fecaca",
+
+    // inputs / borders
+    inputBg: isLight ? "#f9fafb" : "#020617",
+    inputBorder: isLight ? "#d1d5db" : "#374151",
+    inputText: isLight ? "#111827" : "#e5e7eb",
+
+    // small chips / helper text
+    chipText: isLight ? "#065f46" : "#a7f3d0",
+  };
 
   // Core state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [transcript, setTranscript] = useState(null); // { items: [...] } or null
-  const [summary, setSummary] = useState(null);       // { bullets: [...] } or null
+  const [summary, setSummary] = useState(null); // { bullets: [...] } or null
 
   // Audio / meeting name
   const [audioUrl, setAudioUrl] = useState(null);
@@ -31,7 +65,6 @@ export default function MeetingDetailPage() {
   const [newActionStatus, setNewActionStatus] = useState("idle"); // "idle" | "creating"
   const [newActionError, setNewActionError] = useState(null);
 
-
   // PDF export state
   const [pdfStatus, setPdfStatus] = useState("idle"); // "idle" | "downloading" | "error"
   const [pdfError, setPdfError] = useState(null);
@@ -45,22 +78,21 @@ export default function MeetingDetailPage() {
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const audioRef = useRef(null);
 
-
-
-  function handleDownloadPdf() {
+  // Simple “open in new tab” functions (not used in UI anymore but kept just in case)
+  function handleDownloadPdfTab() {
     if (!meetingId) return;
     const base = getApiBaseUrl();
     const url = `${base}/v1/exports/pdf?meeting_id=${meetingId}`;
     window.open(url, "_blank");
   }
 
-  function handleDownloadMarkdown() {
+  function handleDownloadMarkdownTab() {
     if (!meetingId) return;
     const base = getApiBaseUrl();
     const url = `${base}/v1/exports/markdown?meeting_id=${meetingId}`;
     window.open(url, "_blank");
   }
-  
+
   function highlightText(text, query) {
     if (!text) return "";
     const q = (query || "").trim();
@@ -89,8 +121,10 @@ export default function MeetingDetailPage() {
         <mark
           key={`h-${key++}`}
           style={{
-            backgroundColor: "rgba(34,197,94,0.35)",
-            color: "#f9fafb",
+            backgroundColor: isLight
+              ? "rgba(34,197,94,0.2)"
+              : "rgba(34,197,94,0.35)",
+            color: isLight ? "#065f46" : "#f9fafb",
             padding: "0 0.05em",
             borderRadius: "0.15rem",
           }}
@@ -119,11 +153,7 @@ export default function MeetingDetailPage() {
 
     // Nudge audio to that time if we know it
     const meta = segmentMetaById[segmentId];
-    if (
-      meta &&
-      typeof meta.startSeconds === "number" &&
-      audioRef.current
-    ) {
+    if (meta && typeof meta.startSeconds === "number" && audioRef.current) {
       try {
         audioRef.current.currentTime = meta.startSeconds;
         audioRef.current.play().catch(() => {});
@@ -132,7 +162,6 @@ export default function MeetingDetailPage() {
       }
     }
   }
-
 
   // ---- Actions: create ----
   async function handleCreateAction(e) {
@@ -210,7 +239,7 @@ export default function MeetingDetailPage() {
     }
   }
 
-  // ---- PDF download ----
+  // ---- Robust downloads via apiFetch ----
   async function handleDownloadPdf() {
     setPdfStatus("downloading");
     setPdfError(null);
@@ -251,7 +280,7 @@ export default function MeetingDetailPage() {
       setPdfStatus("error");
     }
   }
-  
+
   async function handleSearchSubmit(e) {
     e.preventDefault();
     const q = searchQuery.trim();
@@ -262,10 +291,9 @@ export default function MeetingDetailPage() {
     setSearchResults([]);
 
     try {
-      const url =
-        `/v1/search?mode=any&meeting_id=${encodeURIComponent(
-          meetingId
-        )}&q=${encodeURIComponent(q)}`;
+      const url = `/v1/search?mode=any&meeting_id=${encodeURIComponent(
+        meetingId
+      )}&q=${encodeURIComponent(q)}`;
 
       const resp = await apiFetch(url);
 
@@ -302,7 +330,7 @@ export default function MeetingDetailPage() {
       setSearchStatus("error");
     }
   }
-  
+
   async function downloadExport(kind) {
     if (!meetingId) return;
 
@@ -339,17 +367,10 @@ export default function MeetingDetailPage() {
       alert(`Error downloading ${ext}: ${err?.message || err}`);
     }
   }
-  
-  function handleDownloadPdf() {
-    downloadExport("pdf");
-  }
 
   function handleDownloadMarkdown() {
     downloadExport("md");
   }
-
-
-
 
   // ---- Initial load: transcript, summary, actions ----
   useEffect(() => {
@@ -411,30 +432,29 @@ export default function MeetingDetailPage() {
           throw new Error(detail || `Summary HTTP ${sumRes.status}`);
         }
 
-    // Actions
-    let actJson = [];
-    if (actRes.ok) {
-      actJson = await actRes.json();
-    } else if (actRes.status === 404) {
-      actJson = [];
-    } else {
-      const text = await actRes.text();
-      throw new Error(text || `Actions HTTP ${actRes.status}`);
-    }
+        // Actions
+        let actJson = [];
+        if (actRes.ok) {
+          actJson = await actRes.json();
+        } else if (actRes.status === 404) {
+          actJson = [];
+        } else {
+          const text = await actRes.text();
+          throw new Error(text || `Actions HTTP ${actRes.status}`);
+        }
 
-    if (cancelled) return;
+        if (cancelled) return;
 
-    const actItems = Array.isArray(actJson)
-      ? actJson
-      : Array.isArray(actJson.items)
-      ? actJson.items
-      : [];
+        const actItems = Array.isArray(actJson)
+          ? actJson
+          : Array.isArray(actJson.items)
+          ? actJson.items
+          : [];
 
-    setTranscript(trJson);
-    setSummary(sumJson);
-    setActions(actItems);
-    setActionsStatus("ok");
-
+        setTranscript(trJson);
+        setSummary(sumJson);
+        setActions(actItems);
+        setActionsStatus("ok");
       } catch (err) {
         console.error("Failed to load meeting detail:", err);
         if (!cancelled) {
@@ -445,9 +465,7 @@ export default function MeetingDetailPage() {
           );
           setActionsStatus("error");
           setActionsError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load actions"
+            err instanceof Error ? err.message : "Failed to load actions"
           );
         }
       } finally {
@@ -463,8 +481,7 @@ export default function MeetingDetailPage() {
     };
   }, [meetingId, navigate]);
 
-
-    // ---- Load latest audio for this meeting ----
+  // ---- Load latest audio for this meeting ----
   useEffect(() => {
     if (!meetingId) return;
     let cancelled = false;
@@ -565,7 +582,6 @@ export default function MeetingDetailPage() {
     };
   }, [meetingId, navigate]);
 
-
   useEffect(() => {
     if (!transcript || !Array.isArray(transcript.items)) {
       setSegmentMetaById({});
@@ -584,75 +600,59 @@ export default function MeetingDetailPage() {
       return `${mm}:${ss}`;
     };
 
-  transcript.items.forEach((seg, index) => {
-    const key = String(seg.id);
+    transcript.items.forEach((seg, index) => {
+      const key = String(seg.id);
 
-    const rawStart =
-      seg.t_start_seconds ?? seg.t_start ?? seg.start ?? 0;
-    const rawEnd =
-      seg.t_end_seconds ?? seg.t_end ?? seg.end ?? rawStart;
+      const rawStart =
+        seg.t_start_seconds ?? seg.t_start ?? seg.start ?? 0;
+      const rawEnd =
+        seg.t_end_seconds ?? seg.t_end ?? seg.end ?? rawStart;
 
-    const startSeconds =
-      typeof rawStart === "number"
-        ? rawStart
-        : parseFloat(rawStart) || 0;
+      const startSeconds =
+        typeof rawStart === "number" ? rawStart : parseFloat(rawStart) || 0;
 
-    const endSeconds =
-      typeof rawEnd === "number"
-        ? rawEnd
-        : parseFloat(rawEnd) || startSeconds;
+      const endSeconds =
+        typeof rawEnd === "number"
+          ? rawEnd
+          : parseFloat(rawEnd) || startSeconds;
 
-    meta[key] = {
-      index,
-      startLabel: formatTime(startSeconds),
-      endLabel: formatTime(endSeconds),
-      startSeconds,
-      endSeconds,
-    };
-  });
-
+      meta[key] = {
+        index,
+        startLabel: formatTime(startSeconds),
+        endLabel: formatTime(endSeconds),
+        startSeconds,
+        endSeconds,
+      };
+    });
 
     setSegmentMetaById(meta);
   }, [transcript]);
 
-
-  
   const idShort = meetingId ? String(meetingId).slice(0, 8) : "";
   const displayMeetingName =
     meetingName || (idShort ? `Meeting ${idShort}` : "Meeting");
 
   return (
-        <div
-            style={{
-            minHeight: "100%",
-            display: "flex",
-            flexDirection: "column",
-            fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-            }}
-        >
-
-
+    <div className="app-page" data-theme={theme}>
       {/* Main content */}
-        <main
+      <main
         style={{
-            flex: 1,
-            padding: "0",
-            maxWidth: "960px",
-            width: "100%",
-            margin: "0 auto",
-            display: "grid",
-            gap: "1rem",
+          flex: 1,
+          padding: "0",
+          maxWidth: "960px",
+          width: "100%",
+          margin: "0 auto",
+          display: "grid",
+          gap: "1rem",
         }}
-        >
-
+      >
         {/* Heading */}
         <section
           style={{
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
-            background:
-              "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
-            border: "1px solid rgba(34,197,94,0.35)",
+            background: colors.heroBg,
+            border: colors.heroBorder,
           }}
         >
           <div
@@ -673,7 +673,7 @@ export default function MeetingDetailPage() {
             style={{
               marginTop: "0.35rem",
               fontSize: "0.8rem",
-              color: "#cbd5f5",
+              color: colors.muted,
             }}
           >
             id: <code>{meetingId}</code>
@@ -686,25 +686,25 @@ export default function MeetingDetailPage() {
                 marginTop: "0.75rem",
                 padding: "0.5rem",
                 borderRadius: "0.75rem",
-                background: "#020617",
-                border: "1px solid #1f2937",
+                background: colors.cardBg,
+                border: `1px solid ${colors.cardBorder}`,
               }}
             >
               <div
                 style={{
                   fontSize: "0.75rem",
-                  color: "#9ca3af",
+                  color: colors.muted,
                   marginBottom: "0.25rem",
                 }}
               >
                 Recording{audioFilename ? ` · ${audioFilename}` : ""}
               </div>
-                <audio
-                  ref={audioRef}
-                  controls
-                  src={audioUrl}
-                  style={{ width: "100%" }}
-                />
+              <audio
+                ref={audioRef}
+                controls
+                src={audioUrl}
+                style={{ width: "100%" }}
+              />
             </div>
           )}
           {audioStatus === "loading" && (
@@ -712,7 +712,7 @@ export default function MeetingDetailPage() {
               style={{
                 marginTop: "0.75rem",
                 fontSize: "0.8rem",
-                color: "#9ca3af",
+                color: colors.muted,
               }}
             >
               Loading recording…
@@ -723,7 +723,7 @@ export default function MeetingDetailPage() {
               style={{
                 marginTop: "0.75rem",
                 fontSize: "0.75rem",
-                color: "#fecaca",
+                color: colors.errorText,
               }}
             >
               Couldn&apos;t load recording: {audioError}
@@ -744,9 +744,9 @@ export default function MeetingDetailPage() {
               style={{
                 padding: "0.3rem 0.8rem",
                 borderRadius: "999px",
-                border: "1px solid #4b5563",
+                border: `1px solid ${colors.inputBorder}`,
                 background: "transparent",
-                color: "#e5e7eb",
+                color: colors.inputText,
                 fontSize: "0.8rem",
                 cursor: "pointer",
               }}
@@ -759,9 +759,9 @@ export default function MeetingDetailPage() {
               style={{
                 padding: "0.3rem 0.8rem",
                 borderRadius: "999px",
-                border: "1px solid #4b5563",
+                border: `1px solid ${colors.inputBorder}`,
                 background: "transparent",
-                color: "#e5e7eb",
+                color: colors.inputText,
                 fontSize: "0.8rem",
                 cursor: "pointer",
               }}
@@ -769,8 +769,6 @@ export default function MeetingDetailPage() {
               Export .md
             </button>
           </div>
-
-
         </section>
 
         {/* Error */}
@@ -779,9 +777,11 @@ export default function MeetingDetailPage() {
             style={{
               padding: "1rem 1.25rem",
               borderRadius: "0.75rem",
-              border: "1px solid #7f1d1d",
-              background: "#450a0a",
-              color: "#fecaca",
+              border: `1px solid ${
+                isLight ? "#fecaca" : "rgba(127,29,29,1)"
+              }`,
+              background: colors.errorBg,
+              color: colors.errorText,
               fontSize: "0.9rem",
             }}
           >
@@ -792,7 +792,7 @@ export default function MeetingDetailPage() {
 
         {/* Loading */}
         {loading && !error && (
-          <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+          <p style={{ fontSize: "0.9rem", color: colors.muted }}>
             Loading transcript and summary…
           </p>
         )}
@@ -803,8 +803,8 @@ export default function MeetingDetailPage() {
             style={{
               padding: "1rem 1.25rem",
               borderRadius: "0.75rem",
-              border: "1px solid #111827",
-              background: "#020617",
+              border: `1px solid ${colors.cardBorder}`,
+              background: colors.cardBg,
             }}
           >
             <div
@@ -819,6 +819,7 @@ export default function MeetingDetailPage() {
                 style={{
                   fontSize: "1rem",
                   fontWeight: 500,
+                  color: "var(--section-heading, #16a34a)",
                 }}
               >
                 Summary
@@ -831,10 +832,14 @@ export default function MeetingDetailPage() {
                 style={{
                   padding: "0.25rem 0.7rem",
                   borderRadius: "999px",
-                  border: "1px solid #374151",
+                  border: `1px solid ${colors.inputBorder}`,
                   background:
-                    pdfStatus === "downloading" ? "#4b5563" : "transparent",
-                  color: "#e5e7eb",
+                    pdfStatus === "downloading"
+                      ? isLight
+                        ? "#e5e7eb"
+                        : "#4b5563"
+                      : "transparent",
+                  color: colors.inputText,
                   fontSize: "0.8rem",
                   cursor:
                     pdfStatus === "downloading" ? "default" : "pointer",
@@ -848,8 +853,8 @@ export default function MeetingDetailPage() {
               <p
                 style={{
                   fontSize: "0.8rem",
-                  color: "#fecaca",
-                  background: "#450a0a",
+                  color: colors.errorText,
+                  background: colors.errorBg,
                   padding: "0.35rem 0.5rem",
                   borderRadius: "0.5rem",
                   marginBottom: "0.5rem",
@@ -860,7 +865,7 @@ export default function MeetingDetailPage() {
             )}
 
             {!summary && (
-              <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+              <p style={{ fontSize: "0.9rem", color: colors.muted }}>
                 No summary found for this meeting yet.
               </p>
             )}
@@ -879,9 +884,7 @@ export default function MeetingDetailPage() {
                     fontSize: "0.9rem",
                   }}
                 >
-
                   {summary.bullets.map((b) => {
-
                     const hasSingleSegment =
                       transcript &&
                       Array.isArray(transcript.items) &&
@@ -905,23 +908,24 @@ export default function MeetingDetailPage() {
                       }
                     }
 
-
                     let citationLabel = "";
                     if (primaryMeta) {
                       if (hasSingleSegment) {
                         citationLabel = `full recording (${primaryMeta.startLabel} → ${primaryMeta.endLabel})`;
-                    } else {
-                      const indexLabel = primaryMeta.index + 1; // human 1-based
-                      citationLabel = `Segment ${indexLabel} (${primaryMeta.startLabel} → ${primaryMeta.endLabel})`;
+                      } else {
+                        const indexLabel = primaryMeta.index + 1; // human 1-based
+                        citationLabel = `Segment ${indexLabel} (${primaryMeta.startLabel} → ${primaryMeta.endLabel})`;
+                      }
                     }
-                  }
                     return (
                       <li key={b.id}>
                         <span>{b.text}</span>
                         {primaryMeta && primarySegmentId && (
                           <button
                             type="button"
-                            onClick={() => handleJumpToSegment(primarySegmentId)}
+                            onClick={() =>
+                              handleJumpToSegment(primarySegmentId)
+                            }
                             style={{
                               marginLeft: "0.35rem",
                               border: "none",
@@ -929,7 +933,7 @@ export default function MeetingDetailPage() {
                               padding: "0.1rem 0.35rem",
                               borderRadius: "999px",
                               fontSize: "0.75rem",
-                              color: "#a7f3d0",
+                              color: colors.chipText,
                               cursor: "pointer",
                               display: "inline-flex",
                               alignItems: "center",
@@ -953,10 +957,9 @@ export default function MeetingDetailPage() {
                 </ul>
               )}
 
-
             {summary &&
               (!summary.bullets || summary.bullets.length === 0) && (
-                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                <p style={{ fontSize: "0.9rem", color: colors.muted }}>
                   Summary is present, but contains no bullets.
                 </p>
               )}
@@ -969,8 +972,8 @@ export default function MeetingDetailPage() {
             style={{
               padding: "1rem 1.25rem",
               borderRadius: "0.75rem",
-              border: "1px solid #111827",
-              background: "#020617",
+              border: `1px solid ${colors.cardBorder}`,
+              background: colors.cardBg,
             }}
           >
             <h2
@@ -978,6 +981,7 @@ export default function MeetingDetailPage() {
                 fontSize: "1rem",
                 marginBottom: "0.5rem",
                 fontWeight: 500,
+                color: "var(--section-heading, #16a34a)",
               }}
             >
               Search this meeting
@@ -1001,10 +1005,10 @@ export default function MeetingDetailPage() {
                 style={{
                   flex: "1 1 220px",
                   minWidth: "0",
-                  background: "#020617",
-                  color: "#e5e7eb",
+                  background: colors.inputBg,
+                  color: colors.inputText,
                   borderRadius: "0.5rem",
-                  border: "1px solid #374151",
+                  border: `1px solid ${colors.inputBorder}`,
                   padding: "0.4rem 0.5rem",
                 }}
               />
@@ -1014,12 +1018,14 @@ export default function MeetingDetailPage() {
                 style={{
                   padding: "0.35rem 0.9rem",
                   borderRadius: "999px",
-                  border: "1px solid #374151",
+                  border: `1px solid ${colors.inputBorder}`,
                   background:
                     searchStatus === "loading" || !searchQuery.trim()
-                      ? "#4b5563"
+                      ? isLight
+                        ? "#e5e7eb"
+                        : "#4b5563"
                       : "transparent",
-                  color: "#e5e7eb",
+                  color: colors.inputText,
                   fontSize: "0.85rem",
                   cursor:
                     searchStatus === "loading" || !searchQuery.trim()
@@ -1035,8 +1041,8 @@ export default function MeetingDetailPage() {
               <p
                 style={{
                   fontSize: "0.85rem",
-                  color: "#fecaca",
-                  background: "#450a0a",
+                  color: colors.errorText,
+                  background: colors.errorBg,
                   padding: "0.4rem 0.6rem",
                   borderRadius: "0.5rem",
                   marginBottom: "0.5rem",
@@ -1046,11 +1052,13 @@ export default function MeetingDetailPage() {
               </p>
             )}
 
-            {searchStatus === "ok" && searchResults.length === 0 && searchQuery.trim() && (
-              <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
-                No matches for “{searchQuery.trim()}”.
-              </p>
-            )}
+            {searchStatus === "ok" &&
+              searchResults.length === 0 &&
+              searchQuery.trim() && (
+                <p style={{ fontSize: "0.9rem", color: colors.muted }}>
+                  No matches for “{searchQuery.trim()}”.
+                </p>
+              )}
 
             {searchStatus === "ok" && searchResults.length > 0 && (
               <ul
@@ -1068,12 +1076,14 @@ export default function MeetingDetailPage() {
               >
                 {searchResults.map((hit) => (
                   <li
-                    key={`${hit.transcript_id || "t"}:${hit.segment_id || hit.id || Math.random()}`}
+                    key={`${hit.transcript_id || "t"}:${
+                      hit.segment_id || hit.id || Math.random()
+                    }`}
                     style={{
                       padding: "0.45rem 0.55rem",
                       borderRadius: "0.5rem",
-                      border: "1px solid #111827",
-                      background: "#020617",
+                      border: `1px solid ${colors.cardBorder}`,
+                      background: colors.cardBg,
                       display: "flex",
                       flexDirection: "column",
                       gap: "0.15rem",
@@ -1082,7 +1092,7 @@ export default function MeetingDetailPage() {
                     <div
                       style={{
                         fontSize: "0.75rem",
-                        color: "#9ca3af",
+                        color: colors.muted,
                         display: "flex",
                         flexWrap: "wrap",
                         gap: "0.5rem",
@@ -1090,8 +1100,13 @@ export default function MeetingDetailPage() {
                     >
                       <span>
                         seg #{hit.segment_id ?? "?"} ·{" "}
-                        {hit.t_start != null ? `${hit.t_start.toFixed?.(2) ?? hit.t_start}s` : "0s"} →{" "}
-                        {hit.t_end != null ? `${hit.t_end.toFixed?.(2) ?? hit.t_end}s` : "0s"}
+                        {hit.t_start != null
+                          ? `${hit.t_start.toFixed?.(2) ?? hit.t_start}s`
+                          : "0s"}{" "}
+                        →{" "}
+                        {hit.t_end != null
+                          ? `${hit.t_end.toFixed?.(2) ?? hit.t_end}s`
+                          : "0s"}
                       </span>
                       {hit.filename && (
                         <span>
@@ -1100,9 +1115,10 @@ export default function MeetingDetailPage() {
                       )}
                     </div>
                     <div>
-                        {hit.text ? highlightText(hit.text, searchQuery) : "(no text)"}
+                      {hit.text
+                        ? highlightText(hit.text, searchQuery)
+                        : "(no text)"}
                     </div>
-
                   </li>
                 ))}
               </ul>
@@ -1110,15 +1126,14 @@ export default function MeetingDetailPage() {
           </section>
         )}
 
-
         {/* Transcript */}
         {!loading && !error && (
           <section
             style={{
               padding: "1rem 1.25rem",
               borderRadius: "0.75rem",
-              border: "1px solid #111827",
-              background: "#020617",
+              border: `1px solid ${colors.cardBorder}`,
+              background: colors.cardBg,
             }}
           >
             <h2
@@ -1126,13 +1141,14 @@ export default function MeetingDetailPage() {
                 fontSize: "1rem",
                 marginBottom: "0.5rem",
                 fontWeight: 500,
+                color: "var(--section-heading, #16a34a)",
               }}
             >
               Transcript
             </h2>
 
             {!transcript && (
-              <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+              <p style={{ fontSize: "0.9rem", color: colors.muted }}>
                 No transcript found for this meeting yet.
               </p>
             )}
@@ -1166,10 +1182,12 @@ export default function MeetingDetailPage() {
                           borderRadius: "0.5rem",
                           border: isActive
                             ? "1px solid #10b981"
-                            : "1px solid #111827",
+                            : `1px solid ${colors.cardBorder}`,
                           background: isActive
-                            ? "rgba(16,185,129,0.08)"
-                            : "#020617",
+                            ? isLight
+                              ? "rgba(34,197,94,0.12)"
+                              : "rgba(16,185,129,0.08)"
+                            : colors.cardBg,
                           display: "flex",
                           flexDirection: "column",
                           gap: "0.1rem",
@@ -1183,7 +1201,7 @@ export default function MeetingDetailPage() {
                         <div
                           style={{
                             fontSize: "0.75rem",
-                            color: "#9ca3af",
+                            color: colors.muted,
                             display: "flex",
                             gap: "0.5rem",
                             flexWrap: "wrap",
@@ -1200,10 +1218,9 @@ export default function MeetingDetailPage() {
                 </div>
               )}
 
-
             {transcript &&
               (!transcript.items || transcript.items.length === 0) && (
-                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                <p style={{ fontSize: "0.9rem", color: colors.muted }}>
                   Transcript exists, but contains no segments.
                 </p>
               )}
@@ -1216,8 +1233,8 @@ export default function MeetingDetailPage() {
             marginTop: "0.5rem",
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
-            border: "1px solid #111827",
-            background: "#020617",
+            border: `1px solid ${colors.cardBorder}`,
+            background: colors.cardBg,
           }}
         >
           <h2
@@ -1225,6 +1242,7 @@ export default function MeetingDetailPage() {
               fontSize: "1rem",
               marginBottom: "0.5rem",
               fontWeight: 500,
+              color: "var(--section-heading, #16a34a)",
             }}
           >
             Action items
@@ -1248,17 +1266,17 @@ export default function MeetingDetailPage() {
                 gap: "0.25rem",
               }}
             >
-              <span style={{ color: "#e5e7eb" }}>New action</span>
+              <span style={{ color: colors.inputText }}>New action</span>
               <input
                 type="text"
                 value={newActionText}
                 onChange={(e) => setNewActionText(e.target.value)}
                 placeholder="e.g. Send recap email to team"
                 style={{
-                  background: "#020617",
-                  color: "#e5e7eb",
+                  background: colors.inputBg,
+                  color: colors.inputText,
                   borderRadius: "0.5rem",
-                  border: "1px solid #374151",
+                  border: `1px solid ${colors.inputBorder}`,
                   padding: "0.4rem 0.5rem",
                 }}
               />
@@ -1268,8 +1286,8 @@ export default function MeetingDetailPage() {
               <p
                 style={{
                   fontSize: "0.8rem",
-                  color: "#fecaca",
-                  background: "#450a0a",
+                  color: colors.errorText,
+                  background: colors.errorBg,
                   padding: "0.35rem 0.5rem",
                   borderRadius: "0.5rem",
                 }}
@@ -1287,12 +1305,14 @@ export default function MeetingDetailPage() {
                 alignSelf: "flex-start",
                 padding: "0.3rem 0.8rem",
                 borderRadius: "999px",
-                border: "1px solid #374151",
+                border: `1px solid ${colors.inputBorder}`,
                 background:
                   newActionStatus === "creating" || !newActionText.trim()
-                    ? "#4b5563"
+                    ? isLight
+                      ? "#e5e7eb"
+                      : "#4b5563"
                     : "transparent",
-                color: "#e5e7eb",
+                color: colors.inputText,
                 fontSize: "0.8rem",
                 cursor:
                   newActionStatus === "creating" || !newActionText.trim()
@@ -1306,7 +1326,7 @@ export default function MeetingDetailPage() {
 
           {/* Load/error states + list */}
           {actionsStatus === "loading" && (
-            <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+            <p style={{ fontSize: "0.9rem", color: colors.muted }}>
               Loading actions…
             </p>
           )}
@@ -1315,8 +1335,8 @@ export default function MeetingDetailPage() {
             <p
               style={{
                 fontSize: "0.85rem",
-                color: "#fecaca",
-                background: "#450a0a",
+                color: colors.errorText,
+                background: colors.errorBg,
                 padding: "0.4rem 0.6rem",
                 borderRadius: "0.5rem",
               }}
@@ -1326,7 +1346,7 @@ export default function MeetingDetailPage() {
           )}
 
           {actionsStatus === "ok" && actions.length === 0 && (
-            <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+            <p style={{ fontSize: "0.9rem", color: colors.muted }}>
               No action items yet for this meeting.
             </p>
           )}
@@ -1347,8 +1367,8 @@ export default function MeetingDetailPage() {
                   style={{
                     padding: "0.4rem 0.6rem",
                     borderRadius: "0.5rem",
-                    border: "1px solid #111827",
-                    background: "#020617",
+                    border: `1px solid ${colors.cardBorder}`,
+                    background: colors.cardBg,
                     fontSize: "0.9rem",
                     display: "flex",
                     alignItems: "center",
@@ -1359,7 +1379,7 @@ export default function MeetingDetailPage() {
                   <span
                     style={{
                       textDecoration: a.is_done ? "line-through" : "none",
-                      color: a.is_done ? "#6b7280" : "#e5e7eb",
+                      color: a.is_done ? colors.muted : colors.inputText,
                     }}
                   >
                     {a.text || "(no text)"}
@@ -1371,9 +1391,13 @@ export default function MeetingDetailPage() {
                     style={{
                       padding: "0.2rem 0.6rem",
                       borderRadius: "999px",
-                      border: "1px solid #374151",
-                      background: a.is_done ? "#16a34a" : "transparent",
-                      color: "#e5e7eb",
+                      border: `1px solid ${colors.inputBorder}`,
+                      background: a.is_done
+                        ? "#16a34a"
+                        : isLight
+                        ? "#f9fafb"
+                        : "transparent",
+                      color: a.is_done ? "#f9fafb" : colors.inputText,
                       fontSize: "0.75rem",
                       cursor: "pointer",
                     }}
@@ -1389,4 +1413,5 @@ export default function MeetingDetailPage() {
     </div>
   );
 }
+
 
