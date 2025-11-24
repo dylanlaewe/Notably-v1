@@ -62,6 +62,13 @@ export default function DashboardPage() {
     menuBorder: isLight ? "#e5e7eb" : "#1f2937",
     menuItemHoverBg: isLight ? "#f3f4f6" : "#111827",
     menuDeleteText: isLight ? "#b91c1c" : "#f97373",
+
+    // Drop zone
+    dropBg: isLight ? "#ecfdf5" : "#022c22",
+    dropBorder: isLight ? "#16a34a" : "#4ade80",
+    dropActiveBg: isLight ? "#bbf7d0" : "#065f46",
+    dropIcon: isLight ? "#16a34a" : "#4ade80",
+    dropText: isLight ? "#065f46" : "#bbf7d0",
   };
 
   // Auth ping
@@ -808,39 +815,110 @@ export default function DashboardPage() {
                 }}
               >
                 {/* Simple file input */}
-                <label
+              <label
+                onDragEnter={handleDragOver}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                  gap: "0.5rem",
+                  padding: "1.5rem 1.25rem",
+                  borderRadius: "0.9rem",
+                  border: `1px dashed ${
+                    isDragOver ? colors.meetingRowHoverBorder || colors.dropBorder : colors.dropBorder
+                  }`,
+                  background: isDragOver ? colors.dropActiveBg : colors.dropBg,
+                  boxShadow: isDragOver
+                    ? "0 0 0 2px rgba(34,197,94,0.35), 0 10px 25px rgba(15,23,42,0.18)"
+                    : "0 8px 20px rgba(15,23,42,0.06)",
+                  cursor: "pointer",
+                  transition:
+                    "background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease",
+                  transform: isDragOver ? "translateY(-1px)" : "translateY(0)",
+                }}
+              >
+                {/* Hide the native file input but keep it clickable via the label */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*,video/*"
+                  onChange={handleFileChange}
+                  style={{ display: "none" }}
+                />
+
+                {/* Upload icon */}
+                <div
                   style={{
+                    width: "2.5rem",
+                    height: "2.5rem",
+                    borderRadius: "999px",
                     display: "flex",
-                    flexDirection: "column",
-                    gap: "0.4rem",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: isLight ? "#dcfce7" : "#052e16",
+                    color: colors.dropIcon,
+                    marginBottom: "0.25rem",
                   }}
                 >
-                  <span style={{ color: colors.text }}>Recording</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="audio/*,video/*"
-                    onChange={handleFileChange}
-                    style={{
-                      fontSize: "0.85rem",
-                      color: colors.inputText,
-                    }}
-                  />
-                  <div
-                    style={{
-                      fontSize: "0.8rem",
-                      color: colors.muted,
-                    }}
+                  {/* Simple inline upload icon */}
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
                   >
-                    {uploadFile ? (
-                      <>
-                        Selected: <code>{uploadFile.name}</code>
-                      </>
-                    ) : (
-                      "Max 60 minutes, up to 1 GB. Audio or video is fine."
-                    )}
-                  </div>
-                </label>
+                    <path
+                      d="M12 3L7 8H10V14H14V8H17L12 3Z"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M5 15C4.44772 15 4 15.4477 4 16V19C4 19.5523 4.44772 20 5 20H19C19.5523 20 20 19.5523 20 19V16C20 15.4477 19.5523 15 19 15H17V17H7V15H5Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </div>
+
+                {/* Title */}
+                <div
+                  style={{
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                    color: colors.dropText,
+                  }}
+                >
+                  Drag &amp; drop a recording
+                </div>
+
+                {/* Subtitle / helper text */}
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    color: colors.muted,
+                    maxWidth: "22rem",
+                  }}
+                >
+                  {uploadFile ? (
+                    <>
+                      Selected: <code>{uploadFile.name}</code>
+                    </>
+                  ) : (
+                    <>
+                      or click anywhere in this box to choose a file.
+                      <br />
+                      Max 60 minutes, up to 1&nbsp;GB. Audio or video (MP3, MP4, MOV, WAV, etc.).
+                    </>
+                  )}
+                </div>
+              </label>
+
+
 
                 {uploadStatus === "error" && uploadError && (
                   <div

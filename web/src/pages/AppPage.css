@@ -1,0 +1,25 @@
+/* Shared wrapper for in-app pages */
+.app-page {
+  /* Let AppShell control height; this element just fills the content area */
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+
+  background: transparent;
+}
+
+
+/* Theme-specific text color only */
+.app-page[data-theme="dark"] {
+  color: #e5e7eb;
+}
+
+.app-page[data-theme="light"] {
+  color: #0f172a;
+}
