@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import notablyLogo from "../assets/notably logo.png";
 import { getAccessToken, clearAccessToken } from "../lib/authToken";
+import { useTheme } from "../contexts/ThemeContext";
 import "./AppShell.css";
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
 
 export default function AppShell({ children }) {
   const navigate = useNavigate();
+  const { theme } = useTheme(); // "light" | "dark"
 
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
@@ -94,7 +96,7 @@ export default function AppShell({ children }) {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-theme={theme}>
       <header className="app-shell-header">
         <button
           type="button"
@@ -110,7 +112,7 @@ export default function AppShell({ children }) {
         </button>
 
         <div className="app-shell-header-spacer" />
-        {/* Top-right space reserved if we ever want extra controls */}
+        {/* Top-right space reserved for future controls (theme toggle, etc.) */}
       </header>
 
       <div className="app-shell-body">
@@ -121,68 +123,90 @@ export default function AppShell({ children }) {
               <div className="app-shell-sidebar-section-title">
                 Navigation
               </div>
-                <nav className="app-shell-nav">
+              <nav className="app-shell-nav">
                 <NavLink
-                    to="/dashboard"
-                    className={({ isActive }) =>
+                  to="/dashboard"
+                  className={({ isActive }) =>
                     "app-shell-nav-item" +
                     (isActive ? " app-shell-nav-item-active" : "")
-                    }
+                  }
                 >
-                    <span className="app-shell-nav-dot" />
-                    <span className="app-shell-nav-label">My meetings</span>
+                  <span className="app-shell-nav-dot" />
+                  <span className="app-shell-nav-label">My meetings</span>
                 </NavLink>
 
                 {/* API docs with hover dropdown */}
                 <div className="app-shell-nav-item-wrapper">
-                    <NavLink
+                  <NavLink
                     to="/api-docs"
                     className={({ isActive }) =>
-                        "app-shell-nav-item" +
-                        (isActive ? " app-shell-nav-item-active" : "")
+                      "app-shell-nav-item" +
+                      (isActive ? " app-shell-nav-item-active" : "")
                     }
-                    >
+                  >
                     <span className="app-shell-nav-dot" />
-                    <span className="app-shell-nav-label">API documentation</span>
-                    </NavLink>
+                    <span className="app-shell-nav-label">
+                      API documentation
+                    </span>
+                  </NavLink>
 
-                    <div className="app-shell-subnav">
-                    <a href="/api-docs#overview" className="app-shell-subnav-link">
-                        Overview
+                  <div className="app-shell-subnav">
+                    <a
+                      href="/api-docs#overview"
+                      className="app-shell-subnav-link"
+                    >
+                      Overview
                     </a>
-                    <a href="/api-docs#auth" className="app-shell-subnav-link">
-                        Authentication
+                    <a
+                      href="/api-docs#auth"
+                      className="app-shell-subnav-link"
+                    >
+                      Authentication
                     </a>
-                    <a href="/api-docs#models" className="app-shell-subnav-link">
-                        Data models
+                    <a
+                      href="/api-docs#models"
+                      className="app-shell-subnav-link"
+                    >
+                      Data models
                     </a>
-                    <a href="/api-docs#endpoints" className="app-shell-subnav-link">
-                        Endpoints
+                    <a
+                      href="/api-docs#endpoints"
+                      className="app-shell-subnav-link"
+                    >
+                      Endpoints
                     </a>
-                    <a href="/api-docs#errors" className="app-shell-subnav-link">
-                        Errors
+                    <a
+                      href="/api-docs#errors"
+                      className="app-shell-subnav-link"
+                    >
+                      Errors
                     </a>
-                    <a href="/api-docs#examples" className="app-shell-subnav-link">
-                        Examples
+                    <a
+                      href="/api-docs#examples"
+                      className="app-shell-subnav-link"
+                    >
+                      Examples
                     </a>
-                    <a href="/api-docs#openapi" className="app-shell-subnav-link">
-                        OpenAPI spec
+                    <a
+                      href="/api-docs#openapi"
+                      className="app-shell-subnav-link"
+                    >
+                      OpenAPI spec
                     </a>
-                    </div>
+                  </div>
                 </div>
 
                 <NavLink
-                    to="/faq"
-                    className={({ isActive }) =>
+                  to="/faq"
+                  className={({ isActive }) =>
                     "app-shell-nav-item" +
                     (isActive ? " app-shell-nav-item-active" : "")
-                    }
+                  }
                 >
-                    <span className="app-shell-nav-dot" />
-                    <span className="app-shell-nav-label">FAQ</span>
+                  <span className="app-shell-nav-dot" />
+                  <span className="app-shell-nav-label">FAQ</span>
                 </NavLink>
-                </nav>
-
+              </nav>
             </div>
 
             {/* Account section at bottom, ChatGPT-style */}
@@ -237,4 +261,3 @@ export default function AppShell({ children }) {
     </div>
   );
 }
-

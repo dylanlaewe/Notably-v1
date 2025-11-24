@@ -1,9 +1,33 @@
+// web/src/pages/FAQPage.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTheme } from "../contexts/ThemeContext";
 import "./FAQPage.css";
 
 const FAQPage = () => {
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+
+  const colors = {
+    cardBg: isLight ? "#ffffff" : "#020617",
+    cardBorder: isLight ? "#e5e7eb" : "#111827",
+    heroBg: isLight
+      ? "radial-gradient(circle at top left, rgba(34,197,94,0.08) 0, #f9fafb 55%, #f9fafb 100%)"
+      : "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+    heroBorder: isLight
+      ? "1px solid rgba(148,163,184,0.6)"
+      : "1px solid rgba(34,197,94,0.35)",
+    contactBg: isLight
+      ? "radial-gradient(circle at top, rgba(34,197,94,0.12), #f9fafb 60%)"
+      : "radial-gradient(circle at top, rgba(34,197,94,0.16), #020617 55%)",
+    contactBorder: isLight
+      ? "1px solid rgba(148,163,184,0.6)"
+      : "1px solid rgba(34,197,94,0.35)",
+    muted: isLight ? "#6b7280" : "#9ca3af",
+    heading: isLight ? "#0f172a" : "#f9fafb",
+  };
+
   const [openFAQ, setOpenFAQ] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -147,16 +171,7 @@ const FAQPage = () => {
   };
 
   return (
-    <div
-      className="faq-container"
-      style={{
-        minHeight: "100%",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily:
-          "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
+    <div className="app-page" data-theme={theme}>
       <main
         className="faq-main"
         style={{
@@ -167,16 +182,15 @@ const FAQPage = () => {
           margin: "0 auto",
         }}
       >
-        {/* Hero / title (replaces old header, matches other pages) */}
+        {/* Hero / title */}
         <section
           style={{
             marginTop: "1.5rem",
             marginBottom: "1rem",
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
-            background:
-              "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
-            border: "1px solid rgba(34,197,94,0.35)",
+            background: colors.heroBg,
+            border: colors.heroBorder,
           }}
         >
           <div>
@@ -196,6 +210,7 @@ const FAQPage = () => {
                 fontSize: "1.5rem",
                 fontWeight: 600,
                 margin: 0,
+                color: colors.heading,
               }}
             >
               Frequently asked questions
@@ -203,7 +218,7 @@ const FAQPage = () => {
             <p
               style={{
                 fontSize: "0.85rem",
-                color: "#9ca3af",
+                color: colors.muted,
                 marginTop: "0.3rem",
                 maxWidth: "40rem",
               }}
@@ -214,15 +229,15 @@ const FAQPage = () => {
           </div>
         </section>
 
-        {/* Search (full width, card) */}
+        {/* Search */}
         <section
           className="faq-search-section"
           style={{
             marginBottom: "1rem",
             padding: "0.75rem 1.25rem",
             borderRadius: "0.75rem",
-            background: "var(--card-bg, #020617)",
-            border: "1px solid var(--card-border, #111827)",
+            background: colors.cardBg,
+            border: colors.cardBorder,
           }}
         >
           <div className="search-container">
@@ -258,14 +273,14 @@ const FAQPage = () => {
           </div>
         </section>
 
-        {/* FAQ content (long horizontal like before) */}
+        {/* FAQ content */}
         <section
           style={{
             marginBottom: "1rem",
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
-            background: "var(--card-bg, #020617)",
-            border: "1px solid var(--card-border, #111827)",
+            background: colors.cardBg,
+            border: colors.cardBorder,
           }}
         >
           <div className="faq-content">
@@ -330,22 +345,21 @@ const FAQPage = () => {
           </div>
         </section>
 
-        {/* Contact section at the bottom, full width like before */}
+        {/* Contact section */}
         <section
           className="faq-contact-section"
           style={{
             marginBottom: "1.75rem",
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
-            background:
-              "radial-gradient(circle at top, rgba(34,197,94,0.16), #020617 55%)",
-            border: "1px solid rgba(34,197,94,0.35)",
+            background: colors.contactBg,
+            border: colors.contactBorder,
           }}
         >
           <div className="faq-contact">
             <div className="contact-card" style={{ border: "none", padding: 0 }}>
               <h3>Still have questions?</h3>
-              <p>
+              <p style={{ color: colors.muted }}>
                 Can&apos;t find what you&apos;re looking for? Check out our API
                 documentation for deeper technical details.
               </p>
@@ -366,4 +380,3 @@ const FAQPage = () => {
 };
 
 export default FAQPage;
-

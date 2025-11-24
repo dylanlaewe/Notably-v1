@@ -1,9 +1,26 @@
 // web/src/pages/ApiDocsPage.jsx
 import React, { useEffect, useState } from "react";
+import { useTheme } from "../contexts/ThemeContext";
+import "./AppPage.css";
 import "./ApiDocsPage.css";
 
 const ApiDocsPage = () => {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const colors = {
+    heroBg: isLight
+      ? "radial-gradient(circle at top left, rgba(34,197,94,0.08) 0, #f9fafb 55%, #f9fafb 100%)"
+      : "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+    heroBorder: isLight
+      ? "1px solid rgba(148,163,184,0.6)"
+      : "1px solid rgba(34,197,94,0.35)",
+    heading: isLight ? "#0f172a" : "#f9fafb",
+    muted: isLight ? "#6b7280" : "#9ca3af",
+    chipBg: isLight ? "rgba(34,197,94,0.08)" : "rgba(15,23,42,0.85)",
+    chipText: isLight ? "#166534" : "#bbf7d0",
+  };
 
   // Scroll detection against the app-shell content area
   useEffect(() => {
@@ -36,15 +53,7 @@ const ApiDocsPage = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily:
-          "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
+    <div className="app-page" data-theme={theme}>
       <main
         className="api-docs-main"
         style={{
@@ -62,9 +71,8 @@ const ApiDocsPage = () => {
             marginBottom: "1rem",
             padding: "1rem 1.25rem",
             borderRadius: "0.75rem",
-            background:
-              "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
-            border: "1px solid rgba(34,197,94,0.35)",
+            background: colors.heroBg,
+            border: colors.heroBorder,
           }}
         >
           <div
@@ -93,6 +101,7 @@ const ApiDocsPage = () => {
                   fontSize: "1.5rem",
                   fontWeight: 600,
                   margin: 0,
+                  color: colors.heading,
                 }}
               >
                 Notably API documentation
@@ -100,7 +109,7 @@ const ApiDocsPage = () => {
               <p
                 style={{
                   fontSize: "0.85rem",
-                  color: "#9ca3af",
+                  color: colors.muted,
                   marginTop: "0.3rem",
                   maxWidth: "40rem",
                 }}
@@ -124,8 +133,8 @@ const ApiDocsPage = () => {
                   padding: "0.15rem 0.55rem",
                   borderRadius: "999px",
                   border: "1px solid rgba(34,197,94,0.4)",
-                  backgroundColor: "rgba(15,23,42,0.85)",
-                  color: "#bbf7d0",
+                  backgroundColor: colors.chipBg,
+                  color: colors.chipText,
                 }}
               >
                 v1.0.0 · MVP
@@ -133,7 +142,7 @@ const ApiDocsPage = () => {
               <span
                 style={{
                   fontSize: "0.75rem",
-                  color: "#9ca3af",
+                  color: colors.muted,
                 }}
               >
                 Base URL: <code>http://localhost:8000</code>
@@ -709,3 +718,4 @@ Client → API: GET /v1/uploads/{id}/result`}</code>
 };
 
 export default ApiDocsPage;
+

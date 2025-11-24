@@ -3,11 +3,66 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../lib/apiClient";
 import { clearAccessToken } from "../lib/authToken";
+import { useTheme } from "../contexts/ThemeContext";
+import "./AppPage.css";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { theme } = useTheme();
 
+  const isLight = theme === "light";
+
+  const colors = {
+    // containers
+    cardBg: isLight ? "#f3f4f6" : "#020617",   // light grey in light mode
+    cardBorder: isLight ? "#e5e7eb" : "#111827",
+
+    // hero "signed in" card
+    heroBg: isLight
+      ? "radial-gradient(circle at top left, rgba(34,197,94,0.08) 0, #f9fafb 55%, #f9fafb 100%)"
+      : "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
+    heroBorder: isLight
+      ? "1px solid rgba(148,163,184,0.6)"
+      : "1px solid rgba(34,197,94,0.35)",
+    heroLabel: isLight ? "#166534" : "#bbf7d0",
+    heroSub: isLight ? "#4b5563" : "#cbd5f5",
+
+    // text
+    text: isLight ? "#0f172a" : "#e5e7eb",
+    muted: isLight ? "#6b7280" : "#9ca3af",
+
+    // alerts / status
+    dangerBg: isLight ? "#fee2e2" : "#450a0a",
+    dangerText: isLight ? "#991b1b" : "#fecaca",
+    okBg: isLight ? "#dcfce7" : "#064e3b",
+    okText: isLight ? "#166534" : "#bbf7d0",
+
+    // inputs
+    inputText: isLight ? "#111827" : "#e5e7eb",
+
+    // primary button (upload)
+    primaryButtonBg: "linear-gradient(135deg, #22c55e, #16a34a)",
+    primaryButtonText: "#e5e7eb",
+    primaryButtonDisabledBg: isLight ? "#9ca3af" : "#4b5563",
+
+    // pill buttons (New meeting, small buttons)
+    pillBorder: isLight ? "#d1d5db" : "#374151",
+    pillText: isLight ? "#111827" : "#e5e7eb",
+    pillDisabledBg: isLight ? "#e5e7eb" : "#4b5563",
+
+    // meeting list rows
+    meetingRowBg: isLight ? "#ffffff" : "#020617",
+    meetingRowHoverBg: isLight ? "#dcfce7" : "#064e3b",
+    meetingRowBorder: isLight ? "#e5e7eb" : "#1f2937",
+    meetingRowHoverBorder: "#10b981",
+
+    // menu
+    menuBg: isLight ? "#ffffff" : "#020617",
+    menuBorder: isLight ? "#e5e7eb" : "#1f2937",
+    menuItemHoverBg: isLight ? "#f3f4f6" : "#111827",
+    menuDeleteText: isLight ? "#b91c1c" : "#f97373",
+  };
 
   // Auth ping
   const [status, setStatus] = useState("loading"); // "loading" | "ok" | "error"
@@ -44,9 +99,6 @@ export default function DashboardPage() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameError, setRenameError] = useState("");
   const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
-
-
-
 
   // ------------------------
   // Initial load: auth ping + meetings
@@ -151,11 +203,7 @@ export default function DashboardPage() {
               // /v1/uploads is ordered by Upload.created_at DESC → first per meeting is latest
               const latestByMeeting = new Map();
               for (const u of uploads) {
-                const mid =
-                  u.meeting_id ||
-                  u.meetingId ||
-                  u.meeting ||
-                  null;
+                const mid = u.meeting_id || u.meetingId || u.meeting || null;
                 if (!mid) continue;
                 const key = String(mid);
                 if (!latestByMeeting.has(key)) {
@@ -165,11 +213,7 @@ export default function DashboardPage() {
 
               enrichedItems = items.map((m) => {
                 const mid =
-                  m.id ||
-                  m.meeting_id ||
-                  m.meetingId ||
-                  m.uuid ||
-                  null;
+                  m.id || m.meeting_id || m.meetingId || m.uuid || null;
                 if (!mid) return m;
 
                 const u = latestByMeeting.get(String(mid));
@@ -180,10 +224,7 @@ export default function DashboardPage() {
                   latest_upload_filename:
                     u.filename || m.latest_upload_filename,
                   created_at:
-                    m.created_at ||
-                    m.createdAt ||
-                    u.created_at ||
-                    null,
+                    m.created_at || m.createdAt || u.created_at || null,
                 };
               });
             }
@@ -193,11 +234,8 @@ export default function DashboardPage() {
 
           setMeetings(enrichedItems);
           setMeetingsStatus("ok");
-
-          // Default the uploadMeetingId to first meeting (use enrichedItems)
-
+          // Default the uploadMeetingId to first meeting (use enrichedItems) — optional
         }
-
       } catch (err) {
         console.error("meetings load failed:", err);
         if (!cancelled) {
@@ -279,7 +317,9 @@ export default function DashboardPage() {
         console.error("upload status poll failed:", err);
         if (!cancelled) {
           setLastUploadPollError(
-            err instanceof Error ? err.message : "Failed to poll upload status"
+            err instanceof Error
+              ? err.message
+              : "Failed to poll upload status"
           );
         }
       }
@@ -305,57 +345,55 @@ export default function DashboardPage() {
     navigate("/settings");
   };
 
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
 
-const handleDrop = (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  setIsDragOver(false);
+    const dt = e.dataTransfer;
+    if (!dt || !dt.files || dt.files.length === 0) return;
 
-  const dt = e.dataTransfer;
-  if (!dt || !dt.files || dt.files.length === 0) return;
+    const file = dt.files[0];
+    if (!file) return;
 
-  const file = dt.files[0];
-  if (!file) return;
-
-  setUploadFile(file);
-  setUploadStatus("idle");
-  setUploadError("");
-};
-
-const handleDragOver = (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  if (!isDragOver) {
-    setIsDragOver(true);
-  }
-};
-
-const handleDragLeave = (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  setIsDragOver(false);
-};
-
-const handleFileChange = (e) => {
-  const files = e.target?.files;
-  const file = files && files.length > 0 ? files[0] : null;
-
-  if (file) {
     setUploadFile(file);
     setUploadStatus("idle");
     setUploadError("");
-  } else {
-    setUploadFile(null);
-  }
-};
+  };
 
-const handleOpenMeeting = (id) => {
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleFileChange = (e) => {
+    const files = e.target?.files;
+    const file = files && files.length > 0 ? files[0] : null;
+
+    if (file) {
+      setUploadFile(file);
+      setUploadStatus("idle");
+      setUploadError("");
+    } else {
+      setUploadFile(null);
+    }
+  };
+
+  const handleOpenMeeting = (id) => {
     if (!id) return;
     navigate(`/meetings/${id}`);
   };
 
-
-const handleUpload = async (e) => {
+  const handleUpload = async (e) => {
     e.preventDefault();
 
     if (!uploadFile) {
@@ -480,45 +518,45 @@ const handleUpload = async (e) => {
       );
       setUploadStatus("error");
     }
-};
-
-
+  };
 
   async function handleDeleteMeeting(id, label) {
-  if (!id) return;
+    if (!id) return;
 
-  const ok = window.confirm(
-    `Delete this meeting?\n\n${label || id}\n\nThis cannot be undone.`
-  );
-  if (!ok) return;
-
-  try {
-    setDeleteError(null);
-    setDeletingId(id);
-
-    const resp = await apiFetch(`/v1/meetings/${id}`, {
-      method: "DELETE",
-    });
-
-    if (!resp.ok && resp.status !== 204) {
-      const text = await resp.text();
-      throw new Error(`HTTP ${resp.status} ${text}`);
-    }
-
-    // Optimistically remove from list
-    setMeetings((prev) => (prev || []).filter((m) => {
-      const mid = m.id || m.meeting_id || m.meetingId || m.uuid;
-      return String(mid) !== String(id);
-    }));
-  } catch (err) {
-    console.error("Failed to delete meeting", err);
-    setDeleteError(
-      err?.message || "Failed to delete meeting. Please try again."
+    const ok = window.confirm(
+      `Delete this meeting?\n\n${label || id}\n\nThis cannot be undone.`
     );
-  } finally {
-    setDeletingId(null);
+    if (!ok) return;
+
+    try {
+      setDeleteError(null);
+      setDeletingId(id);
+
+      const resp = await apiFetch(`/v1/meetings/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!resp.ok && resp.status !== 204) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status} ${text}`);
+      }
+
+      // Optimistically remove from list
+      setMeetings((prev) =>
+        (prev || []).filter((m) => {
+          const mid = m.id || m.meeting_id || m.meetingId || m.uuid;
+          return String(mid) !== String(id);
+        })
+      );
+    } catch (err) {
+      console.error("Failed to delete meeting", err);
+      setDeleteError(
+        err?.message || "Failed to delete meeting. Please try again."
+      );
+    } finally {
+      setDeletingId(null);
+    }
   }
-}
 
   async function handleRenameMeeting(id, currentLabel) {
     if (!id) return;
@@ -530,10 +568,6 @@ const handleUpload = async (e) => {
     if (next === null) return;
 
     const trimmed = next.trim();
-
-    // Allow clearing the name (falls back to filename in UI)
-    // If you want to forbid empty, uncomment this:
-    // if (!trimmed) return;
 
     try {
       setRenameError("");
@@ -582,70 +616,60 @@ const handleUpload = async (e) => {
     }
   }
 
-
   async function handleCreateMeeting() {
-  if (createStatus === "creating") return;
+    if (createStatus === "creating") return;
 
-  setCreateStatus("creating");
-  setCreateError(null);
+    setCreateStatus("creating");
+    setCreateError(null);
 
-  try {
-    const resp = await apiFetch("/v1/meetings", {
-      method: "POST",
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`Create failed: ${resp.status} ${text}`);
-    }
-
-    const data = await resp.json();
-    const newId = data.id;
-
-    // Use this for uploads
-    setUploadMeetingId(newId);
-
-    // Optimistically add to meetings list if it's not already there
-    setMeetings((prev) => {
-      const exists = prev.some((m) => {
-        const mid =
-          m.id || m.meeting_id || m.meetingId || m.uuid || "";
-        return String(mid) === String(newId);
+    try {
+      const resp = await apiFetch("/v1/meetings", {
+        method: "POST",
       });
-      if (exists) return prev;
 
-      return [
-        {
-          id: newId,
-          title: `New meeting ${String(newId).slice(0, 8)}…`,
-          created_at: new Date().toISOString(),
-        },
-        ...prev,
-      ];
-    });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Create failed: ${resp.status} ${text}`);
+      }
 
-    setCreateStatus("ok");
-  } catch (err) {
-    console.error(err);
-    setCreateError(
-      err?.message || "Failed to create meeting"
-    );
-    setCreateStatus("error");
+      const data = await resp.json();
+      const newId = data.id;
+
+      // Use this for uploads
+      setUploadMeetingId(newId);
+
+      // Optimistically add to meetings list if it's not already there
+      setMeetings((prev) => {
+        const exists = prev.some((m) => {
+          const mid =
+            m.id || m.meeting_id || m.meetingId || m.uuid || "";
+          return String(mid) === String(newId);
+        });
+        if (exists) return prev;
+
+        return [
+          {
+            id: newId,
+            title: `New meeting ${String(newId).slice(0, 8)}…`,
+            created_at: new Date().toISOString(),
+          },
+          ...prev,
+        ];
+      });
+
+      setCreateStatus("ok");
+    } catch (err) {
+      console.error(err);
+      setCreateError(err?.message || "Failed to create meeting");
+      setCreateStatus("error");
+    }
   }
-}
 
   // ------------------------
   // Render
   // ------------------------
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-      }}
-    >
+    <div className="app-page" data-theme={theme}>
       <main
         style={{
           flex: 1,
@@ -655,10 +679,9 @@ const handleUpload = async (e) => {
           margin: "0 auto",
         }}
       >
-
         {/* Auth status */}
         {status === "loading" && (
-          <p style={{ color: "#9ca3af" }}>Checking your session…</p>
+          <p style={{ color: colors.muted }}>Checking your session…</p>
         )}
 
         {status === "error" && (
@@ -666,8 +689,8 @@ const handleUpload = async (e) => {
             style={{
               padding: "1rem",
               borderRadius: "0.75rem",
-              background: "#450a0a",
-              color: "#fecaca",
+              background: colors.dangerBg,
+              color: colors.dangerText,
               fontSize: "0.9rem",
             }}
           >
@@ -683,38 +706,36 @@ const handleUpload = async (e) => {
               style={{
                 padding: "1rem 1.25rem",
                 borderRadius: "0.75rem",
-                background:
-                  "radial-gradient(circle at top left, rgba(34,197,94,0.2) 0, #020617 55%, #020617 100%)",
-                border: "1px solid rgba(34,197,94,0.35)",
+                background: colors.heroBg,
+                border: colors.heroBorder,
               }}
             >
-
-
               <div
                 style={{
                   fontSize: "0.8rem",
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
-                  color: "#bbf7d0", // was #bfdbfe
+                  color: colors.heroLabel,
                   marginBottom: "0.25rem",
                 }}
               >
                 Signed in as
               </div>
 
-              <div style={{ fontSize: "1.1rem", fontWeight: 500 }}>
+              <div
+                style={{ fontSize: "1.1rem", fontWeight: 500, color: colors.text }}
+              >
                 {user.email || "unknown"}
               </div>
               <div
                 style={{
                   fontSize: "0.8rem",
-                  color: "#cbd5f5",
+                  color: colors.heroSub,
                   marginTop: "0.35rem",
                 }}
               >
                 user_id: <code>{user.user_id}</code>
               </div>
-
             </section>
 
             {/* Uploads */}
@@ -722,8 +743,8 @@ const handleUpload = async (e) => {
               style={{
                 padding: "1rem 1.25rem",
                 borderRadius: "0.75rem",
-                border: "1px solid #111827",
-                background: "#020617",
+                border: `1px solid ${colors.cardBorder}`,
+                background: colors.cardBg,
               }}
             >
               <h2
@@ -731,16 +752,16 @@ const handleUpload = async (e) => {
                   fontSize: "1rem",
                   marginBottom: "0.5rem",
                   fontWeight: 500,
+                  color: "var(--section-heading, #16a34a)",
                 }}
               >
                 Uploads
               </h2>
 
-              {/* Debug line so we can see what's going on */}
               <p
                 style={{
                   fontSize: "0.85rem",
-                  color: "#9ca3af",
+                  color: colors.muted,
                   marginTop: "0.25rem",
                 }}
               >
@@ -748,13 +769,12 @@ const handleUpload = async (e) => {
                 pick a meeting, we&apos;ll make a new one for you.
               </p>
 
-
               {meetingsStatus === "error" && (
                 <p
                   style={{
                     fontSize: "0.85rem",
-                    color: "#fecaca",
-                    background: "#450a0a",
+                    color: colors.dangerText,
+                    background: colors.dangerBg,
                     padding: "0.4rem 0.6rem",
                     borderRadius: "0.5rem",
                     marginBottom: "0.5rem",
@@ -768,7 +788,7 @@ const handleUpload = async (e) => {
                 <p
                   style={{
                     fontSize: "0.85rem",
-                    color: "#9ca3af",
+                    color: colors.muted,
                     marginBottom: "0.5rem",
                   }}
                 >
@@ -776,7 +796,6 @@ const handleUpload = async (e) => {
                   we&apos;ll create your first meeting automatically.
                 </p>
               )}
-
 
               <form
                 onSubmit={handleUpload}
@@ -788,50 +807,47 @@ const handleUpload = async (e) => {
                   fontSize: "0.9rem",
                 }}
               >
-
-              {/* Simple file input */}
-              <label
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.4rem",
-                }}
-              >
-                <span style={{ color: "#e5e7eb" }}>Recording</span>
-                <input
-                  type="file"
-                  accept="audio/*,video/*"
-                  onChange={handleFileChange}
+                {/* Simple file input */}
+                <label
                   style={{
-                    fontSize: "0.85rem",
-                    color: "#e5e7eb",
-                  }}
-                />
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "#9ca3af",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.4rem",
                   }}
                 >
-                  {uploadFile ? (
-                    <>
-                      Selected: <code>{uploadFile.name}</code>
-                    </>
-                  ) : (
-                    "Max 60 minutes, up to 1 GB. Audio or video is fine."
-                  )}
-                </div>
-              </label>
-
-
-
+                  <span style={{ color: colors.text }}>Recording</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*,video/*"
+                    onChange={handleFileChange}
+                    style={{
+                      fontSize: "0.85rem",
+                      color: colors.inputText,
+                    }}
+                  />
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      color: colors.muted,
+                    }}
+                  >
+                    {uploadFile ? (
+                      <>
+                        Selected: <code>{uploadFile.name}</code>
+                      </>
+                    ) : (
+                      "Max 60 minutes, up to 1 GB. Audio or video is fine."
+                    )}
+                  </div>
+                </label>
 
                 {uploadStatus === "error" && uploadError && (
                   <div
                     style={{
                       fontSize: "0.85rem",
-                      color: "#fecaca",
-                      background: "#450a0a",
+                      color: colors.dangerText,
+                      background: colors.dangerBg,
                       padding: "0.4rem 0.6rem",
                       borderRadius: "0.5rem",
                     }}
@@ -844,8 +860,8 @@ const handleUpload = async (e) => {
                   <div
                     style={{
                       fontSize: "0.85rem",
-                      color: "#bbf7d0",
-                      background: "#064e3b",
+                      color: colors.okText,
+                      background: colors.okBg,
                       padding: "0.4rem 0.6rem",
                       borderRadius: "0.5rem",
                     }}
@@ -867,10 +883,9 @@ const handleUpload = async (e) => {
                     border: "none",
                     background:
                       uploadStatus === "uploading"
-                        ? "#4b5563"
-                        : "linear-gradient(135deg, #22c55e, #16a34a)",
-
-                    color: "#e5e7eb",
+                        ? colors.primaryButtonDisabledBg
+                        : colors.primaryButtonBg,
+                    color: colors.primaryButtonText,
                     fontSize: "0.9rem",
                     fontWeight: 500,
                     cursor:
@@ -890,8 +905,8 @@ const handleUpload = async (e) => {
                 style={{
                   padding: "1rem 1.25rem",
                   borderRadius: "0.75rem",
-                  border: "1px solid #111827",
-                  background: "#020617",
+                  border: `1px solid ${colors.cardBorder}`,
+                  background: colors.cardBg,
                 }}
               >
                 <h2
@@ -906,7 +921,7 @@ const handleUpload = async (e) => {
                 <p
                   style={{
                     fontSize: "0.85rem",
-                    color: "#9ca3af",
+                    color: colors.muted,
                     marginBottom: "0.25rem",
                   }}
                 >
@@ -916,6 +931,7 @@ const handleUpload = async (e) => {
                   style={{
                     fontSize: "0.9rem",
                     marginBottom: "0.25rem",
+                    color: colors.text,
                   }}
                 >
                   Status:{" "}
@@ -926,8 +942,8 @@ const handleUpload = async (e) => {
                   <p
                     style={{
                       fontSize: "0.85rem",
-                      color: "#fecaca",
-                      background: "#450a0a",
+                      color: colors.dangerText,
+                      background: colors.dangerBg,
                       padding: "0.4rem 0.6rem",
                       borderRadius: "0.5rem",
                       marginTop: "0.25rem",
@@ -941,13 +957,12 @@ const handleUpload = async (e) => {
                   <p
                     style={{
                       fontSize: "0.85rem",
-                      color: "#bbf7d0",
+                      color: colors.okText,
                       marginTop: "0.25rem",
                     }}
                   >
                     Background processing finished. Stub transcript & summary
-                    should now exist for this meeting. We’ll wire up the
-                    transcript view next.
+                    should now exist for this meeting.
                   </p>
                 )}
 
@@ -955,7 +970,7 @@ const handleUpload = async (e) => {
                   <p
                     style={{
                       fontSize: "0.85rem",
-                      color: "#fecaca",
+                      color: colors.dangerText,
                       marginTop: "0.25rem",
                     }}
                   >
@@ -971,57 +986,59 @@ const handleUpload = async (e) => {
               style={{
                 padding: "1rem 1.25rem",
                 borderRadius: "0.75rem",
-                border: "1px solid #111827",
-                background: "#020617",
+                border: `1px solid ${colors.cardBorder}`,
+                background: colors.cardBg,
               }}
             >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "0.5rem",
-              }}
-            >
-              <h2
+              <div
                 style={{
-                  fontSize: "1rem",
-                  fontWeight: 500,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.5rem",
                 }}
               >
-                My meetings
-              </h2>
+                <h2
+                  style={{
+                    fontSize: "1rem",
+                    fontWeight: 500,
+                    color: "var(--section-heading, #16a34a)",
+                  }}
+                >
+                  My meetings
+                </h2>
 
-              <button
-                type="button"
-                onClick={handleCreateMeeting}
-                disabled={createStatus === "creating"}
-                style={{
-                  padding: "0.25rem 0.7rem",
-                  borderRadius: "999px",
-                  border:
-                    createStatus === "creating"
-                      ? "1px solid #4b5563"
-                      : "1px solid #22c55e",
-                  background:
-                    createStatus === "creating" ? "#4b5563" : "transparent",
-                  color: "#e5e7eb",
-                  fontSize: "0.8rem",
-                  cursor:
-                    createStatus === "creating" ? "default" : "pointer",
-                }}
-              >
-                {createStatus === "creating" ? "Creating…" : "New meeting"}
-              </button>
-
-            </div>
+                <button
+                  type="button"
+                  onClick={handleCreateMeeting}
+                  disabled={createStatus === "creating"}
+                  style={{
+                    padding: "0.25rem 0.7rem",
+                    borderRadius: "999px",
+                    border:
+                      createStatus === "creating"
+                        ? `1px solid ${colors.muted}`
+                        : "1px solid #22c55e",
+                    background:
+                      createStatus === "creating"
+                        ? colors.pillDisabledBg
+                        : "transparent",
+                    color: colors.pillText,
+                    fontSize: "0.8rem",
+                    cursor:
+                      createStatus === "creating" ? "default" : "pointer",
+                  }}
+                >
+                  {createStatus === "creating" ? "Creating…" : "New meeting"}
+                </button>
+              </div>
 
               {createError && (
                 <p
                   style={{
                     fontSize: "0.8rem",
-                    color: "#fecaca",
-                    background: "#450a0a",
+                    color: colors.dangerText,
+                    background: colors.dangerBg,
                     padding: "0.4rem 0.6rem",
                     borderRadius: "0.5rem",
                     marginBottom: "0.5rem",
@@ -1035,8 +1052,8 @@ const handleUpload = async (e) => {
                 <p
                   style={{
                     fontSize: "0.85rem",
-                    color: "#fecaca",
-                    background: "#450a0a",
+                    color: colors.dangerText,
+                    background: colors.dangerBg,
                     padding: "0.4rem 0.6rem",
                     borderRadius: "0.5rem",
                     marginBottom: "0.5rem",
@@ -1047,7 +1064,7 @@ const handleUpload = async (e) => {
               )}
 
               {meetingsStatus === "loading" && (
-                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                <p style={{ fontSize: "0.9rem", color: colors.muted }}>
                   Loading meetings…
                 </p>
               )}
@@ -1056,8 +1073,8 @@ const handleUpload = async (e) => {
                 <p
                   style={{
                     fontSize: "0.85rem",
-                    color: "#fecaca",
-                    background: "#450a0a",
+                    color: colors.dangerText,
+                    background: colors.dangerBg,
                     padding: "0.5rem 0.75rem",
                     borderRadius: "0.5rem",
                   }}
@@ -1067,7 +1084,7 @@ const handleUpload = async (e) => {
               )}
 
               {meetingsStatus === "ok" && meetings.length === 0 && (
-                <p style={{ fontSize: "0.9rem", color: "#9ca3af" }}>
+                <p style={{ fontSize: "0.9rem", color: colors.muted }}>
                   You don’t have any meetings yet.
                 </p>
               )}
@@ -1093,7 +1110,6 @@ const handleUpload = async (e) => {
                     const created =
                       m.created_at || m.createdAt || m.created || null;
 
-                    // Prefer the latest upload filename as the base label
                     const rawFilename =
                       m.latest_upload_filename ||
                       m.filename ||
@@ -1102,13 +1118,9 @@ const handleUpload = async (e) => {
                       null;
 
                     const filenameLabel = rawFilename
-                      ? rawFilename.replace(/\.[^/.]+$/, "") // strip extension
+                      ? rawFilename.replace(/\.[^/.]+$/, "")
                       : null;
 
-                    // Final title:
-                    // 1) explicit meeting name (renamed)
-                    // 2) base filename
-                    // 3) other text fallbacks
                     const displayTitle =
                       (m.name && m.name.trim()) ||
                       filenameLabel ||
@@ -1134,8 +1146,14 @@ const handleUpload = async (e) => {
                         onMouseLeave={() => setHoveredMeetingId(null)}
                         style={{
                           listStyle: "none",
-                          background: isHovered ? "#064e3b" : "#020617",
-                          border: `1px solid ${isHovered ? "#10b981" : "#1f2937"}`,
+                          background: isHovered
+                            ? colors.meetingRowHoverBg
+                            : colors.meetingRowBg,
+                          border: `1px solid ${
+                            isHovered
+                              ? colors.meetingRowHoverBorder
+                              : colors.meetingRowBorder
+                          }`,
                           borderRadius: "0.75rem",
                           padding: "0.75rem 0.85rem",
                           marginBottom: "0.75rem",
@@ -1161,7 +1179,7 @@ const handleUpload = async (e) => {
                             style={{
                               fontSize: "0.95rem",
                               fontWeight: 500,
-                              color: "#e5e7eb",
+                              color: colors.text,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -1177,7 +1195,9 @@ const handleUpload = async (e) => {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation(); // don't trigger card click
-                                setMenuOpenId((prev) => (prev === id ? null : id));
+                                setMenuOpenId((prev) =>
+                                  prev === id ? null : id
+                                );
                               }}
                               aria-label="Meeting options"
                               style={{
@@ -1186,7 +1206,7 @@ const handleUpload = async (e) => {
                                 padding: 0,
                                 margin: 0,
                                 cursor: "pointer",
-                                color: "#9ca3af",
+                                color: colors.muted,
                                 fontSize: "1.05rem",
                                 lineHeight: 1,
                                 display: "inline-flex",
@@ -1194,13 +1214,15 @@ const handleUpload = async (e) => {
                                 justifyContent: "center",
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.color = "#e5e7eb";
+                                e.currentTarget.style.color = colors.text;
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.color = "#9ca3af";
+                                e.currentTarget.style.color = colors.muted;
                               }}
                             >
-                              <span style={{ transform: "translateY(-1px)" }}>⋮</span>
+                              <span style={{ transform: "translateY(-1px)" }}>
+                                ⋮
+                              </span>
                             </button>
 
                             {menuOpenId === id && (
@@ -1210,8 +1232,8 @@ const handleUpload = async (e) => {
                                   position: "absolute",
                                   right: 0,
                                   top: "120%",
-                                  background: "#020617",
-                                  border: "1px solid #1f2937",
+                                  background: colors.menuBg,
+                                  border: `1px solid ${colors.menuBorder}`,
                                   borderRadius: "0.5rem",
                                   boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
                                   padding: "0.25rem 0",
@@ -1231,7 +1253,7 @@ const handleUpload = async (e) => {
                                     padding: "0.35rem 0.85rem",
                                     border: "none",
                                     background: "transparent",
-                                    color: "#e5e7eb",
+                                    color: colors.text,
                                     fontSize: "0.85rem",
                                     cursor: "pointer",
                                     whiteSpace: "nowrap",
@@ -1239,12 +1261,14 @@ const handleUpload = async (e) => {
                                       "background 0.08s ease, transform 0.06s ease",
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = "#111827";
+                                    e.currentTarget.style.background =
+                                      colors.menuItemHoverBg;
                                     e.currentTarget.style.transform =
                                       "translateY(-0.5px)";
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = "transparent";
+                                    e.currentTarget.style.background =
+                                      "transparent";
                                     e.currentTarget.style.transform =
                                       "translateY(0)";
                                   }}
@@ -1264,7 +1288,7 @@ const handleUpload = async (e) => {
                                     padding: "0.35rem 0.85rem",
                                     border: "none",
                                     background: "transparent",
-                                    color: "#f97373",
+                                    color: colors.menuDeleteText,
                                     fontSize: "0.85rem",
                                     cursor: "pointer",
                                     whiteSpace: "nowrap",
@@ -1272,12 +1296,14 @@ const handleUpload = async (e) => {
                                       "background 0.08s ease, transform 0.06s ease",
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = "#111827";
+                                    e.currentTarget.style.background =
+                                      colors.menuItemHoverBg;
                                     e.currentTarget.style.transform =
                                       "translateY(-0.5px)";
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = "transparent";
+                                    e.currentTarget.style.background =
+                                      "transparent";
                                     e.currentTarget.style.transform =
                                       "translateY(0)";
                                   }}
@@ -1293,7 +1319,7 @@ const handleUpload = async (e) => {
                         <div
                           style={{
                             fontSize: "0.8rem",
-                            color: "#9ca3af",
+                            color: colors.muted,
                             display: "flex",
                             gap: "0.5rem",
                             flexWrap: "wrap",
@@ -1331,4 +1357,3 @@ const handleUpload = async (e) => {
     </div>
   );
 }
-              
