@@ -84,6 +84,24 @@ def maybe_transcribe_from_minio(
     if existing:
         _log(f"Transcript already exists for upload_id={upload.id}; skipping re-transcribe.")
         return True
+    
+    # Prefer the 16kHz WAV variant if tasks.py wrote one (ffmpeg output).
+    # This lets us support .mov/.mp4/etc. even if the raw container isn't supported.
+    wav_obj = (
+        db.query(UploadObject)
+        .filter(
+            UploadObject.upload_id == upload.id,
+            UploadObject.object_key.like("%/audio-16k.wav"),
+        )
+        .order_by(UploadObject.id.desc())
+        .first()
+    )
+    if wav_obj is not None and wav_obj.id != obj.id:
+        _log(
+            f"Using 16kHz WAV object instead of original: "
+            f"{obj.object_key} -> {wav_obj.object_key}"
+        )
+        obj = wav_obj
 
     # 2) Download the audio from MinIO to a temp file
     client = get_minio_client()

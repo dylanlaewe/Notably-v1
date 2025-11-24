@@ -55,6 +55,7 @@ export default function MeetingDetailPage() {
   const [audioError, setAudioError] = useState("");
   const [audioFilename, setAudioFilename] = useState("");
   const [meetingName, setMeetingName] = useState("");
+  const [isVideo, setIsVideo] = useState(false);
 
   // Actions state
   const [actions, setActions] = useState([]);
@@ -525,6 +526,11 @@ export default function MeetingDetailPage() {
 
         const upload = uploads[0]; // list_uploads is ordered newest-first
 
+        const mime = upload.mime_type || "";
+        const isVideoFile = mime.startsWith("video/");
+        setIsVideo(isVideoFile);
+
+
         // 2) Get a presigned download URL for the original audio
         const dlUrl = `/v1/uploads/${encodeURIComponent(
           upload.id
@@ -699,12 +705,24 @@ export default function MeetingDetailPage() {
               >
                 Recording{audioFilename ? ` · ${audioFilename}` : ""}
               </div>
-              <audio
-                ref={audioRef}
-                controls
-                src={audioUrl}
-                style={{ width: "100%" }}
-              />
+              {isVideo ? (
+                <video
+                  controls
+                  src={audioUrl}
+                  style={{
+                    width: "100%",
+                    borderRadius: "0.5rem",
+                    maxHeight: "420px",
+                  }}
+                />
+              ) : (
+                <audio
+                  ref={audioRef}
+                  controls
+                  src={audioUrl}
+                  style={{ width: "100%" }}
+                />
+              )}
             </div>
           )}
           {audioStatus === "loading" && (
