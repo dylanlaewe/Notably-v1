@@ -107,6 +107,16 @@ export default function DashboardPage() {
   const [renameError, setRenameError] = useState("");
   const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
 
+  // Recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingError, setRecordingError] = useState("");
+
+  const mediaRecorderRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+
+
   // ------------------------
   // Initial load: auth ping + meetings
   // ------------------------
@@ -527,6 +537,81 @@ export default function DashboardPage() {
     }
   };
 
+  const formatDuration = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const handleStartRecording = async () => {
+    setRecordingError("");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setRecordingError("Recording is not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const mediaRecorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        // Stop mic
+        stream.getTracks().forEach((track) => track.stop());
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        setIsRecording(false);
+
+        if (!recordingChunksRef.current.length) {
+          setRecordingError("No audio captured. Try recording again.");
+          return;
+        }
+
+        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
+
+        const fileName = `notably-recording-${new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-")}.webm`;
+
+        const file = new File([blob], fileName, { type: "audio/webm" });
+
+        // Reuse existing upload flow
+        setUploadFile(file);
+        // If you track status, you can also reset it here if needed
+        // setUploadStatus("idle");
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Error starting recording:", err);
+      setRecordingError("Unable to access microphone. Check permissions and try again.");
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
   async function handleDeleteMeeting(id, label) {
     if (!id) return;
 
@@ -917,6 +1002,90 @@ export default function DashboardPage() {
                   )}
                 </div>
               </label>
+                
+                <div
+                  style={{
+                    marginTop: "0.75rem",
+                    padding: "0.75rem 1rem",
+                    borderRadius: "0.75rem",
+                    border: `1px solid ${colors.cardBorder}`,
+                    background: isLight ? "#ffffff" : colors.cardBg,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+                    <span
+                      style={{
+                        fontSize: "0.85rem",
+                        fontWeight: 500,
+                        color: colors.text,
+                      }}
+                    >
+                      Or record directly in Notably
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        color: colors.muted,
+                      }}
+                    >
+                      {isRecording
+                        ? `Recording… ${formatDuration(recordingSeconds)}`
+                        : uploadFile && uploadFile.name.endsWith(".webm")
+                        ? `Last recording: ${uploadFile.name}`
+                        : "Use your microphone to capture a quick meeting or call."}
+                    </span>
+                    {recordingError && (
+                      <span
+                        style={{
+                          fontSize: "0.78rem",
+                          color: "#b91c1c",
+                        }}
+                      >
+                        {recordingError}
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    style={{
+                      border: "none",
+                      outline: "none",
+                      cursor: "pointer",
+                      borderRadius: "999px",
+                      padding: "0.4rem 0.9rem",
+                      fontSize: "0.85rem",
+                      fontWeight: 500,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      backgroundColor: isRecording ? "#fee2e2" : "#16a34a",
+                      color: isRecording ? "#b91c1c" : "#ecfdf3",
+                      boxShadow: isRecording
+                        ? "0 0 0 1px rgba(248,113,113,0.5)"
+                        : "0 4px 10px rgba(22,163,74,0.35)",
+                      transition:
+                        "background-color 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease",
+                      transform: isRecording ? "translateY(0)" : "translateY(0)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: "0.6rem",
+                        height: "0.6rem",
+                        borderRadius: isRecording ? "0.2rem" : "999px",
+                        backgroundColor: isRecording ? "#b91c1c" : "#bbf7d0",
+                      }}
+                    />
+                    {isRecording ? "Stop recording" : "Record meeting"}
+                  </button>
+                </div>
+
 
 
 
