@@ -56,6 +56,7 @@ export default function MeetingDetailPage() {
   const [audioFilename, setAudioFilename] = useState("");
   const [meetingName, setMeetingName] = useState("");
   const [isVideo, setIsVideo] = useState(false);
+  
 
   // Actions state
   const [actions, setActions] = useState([]);
@@ -519,24 +520,28 @@ export default function MeetingDetailPage() {
 
         const uploads = Array.isArray(uploadsJson) ? uploadsJson : [];
         if (uploads.length === 0) {
-          // No recording for this meeting → no player, but not an error
           setAudioStatus("idle");
           return;
         }
 
-        const upload = uploads[0]; // list_uploads is ordered newest-first
+        const upload = uploads[0]; // newest-first
 
+        // Decide if this is video or audio based on MIME type
         const mime = upload.mime_type || "";
         const isVideoFile = mime.startsWith("video/");
         setIsVideo(isVideoFile);
 
+        // For video: use original file (e.g. .mov) for <video>
+        // For audio: use the 16kHz WAV variant so Safari can play it
+        const kind = isVideoFile ? "original" : "audio16k";
 
-        // 2) Get a presigned download URL for the original audio
+        // 2) Get a presigned download URL
         const dlUrl = `/v1/uploads/${encodeURIComponent(
           upload.id
-        )}/download?kind=original&ttl=3600&filename=${encodeURIComponent(
-          upload.filename || "audio"
+        )}/download?kind=${kind}&ttl=3600&filename=${encodeURIComponent(
+          upload.filename || (isVideoFile ? "video" : "audio")
         )}`;
+
 
         const dlRes = await apiFetch(dlUrl);
 
@@ -705,15 +710,12 @@ export default function MeetingDetailPage() {
               >
                 Recording{audioFilename ? ` · ${audioFilename}` : ""}
               </div>
+
               {isVideo ? (
                 <video
                   controls
                   src={audioUrl}
-                  style={{
-                    width: "100%",
-                    borderRadius: "0.5rem",
-                    maxHeight: "420px",
-                  }}
+                  style={{ width: "100%", borderRadius: "0.5rem", maxHeight: "420px" }}
                 />
               ) : (
                 <audio
@@ -725,6 +727,7 @@ export default function MeetingDetailPage() {
               )}
             </div>
           )}
+
           {audioStatus === "loading" && (
             <div
               style={{
