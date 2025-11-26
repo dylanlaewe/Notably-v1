@@ -13,6 +13,9 @@ import FAQPage from "./pages/FAQPage.jsx";
 import { isLoggedIn } from "./lib/authToken";
 import AppShell from "./components/AppShell.jsx";
 
+import UpdatePasswordPage from "./pages/UpdatePasswordPage";
+
+
 function App() {
   const authed = isLoggedIn();
 
@@ -54,6 +57,7 @@ function App() {
             )
           }
         />
+        <Route path="/update-password" element={<UpdatePasswordPage />} />
       </Routes>
     </BrowserRouter>
   );
