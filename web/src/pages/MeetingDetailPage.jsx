@@ -56,7 +56,6 @@ export default function MeetingDetailPage() {
   const [audioFilename, setAudioFilename] = useState("");
   const [meetingName, setMeetingName] = useState("");
   const [isVideo, setIsVideo] = useState(false);
-  
 
   // Actions state
   const [actions, setActions] = useState([]);
@@ -542,7 +541,6 @@ export default function MeetingDetailPage() {
           upload.filename || (isVideoFile ? "video" : "audio")
         )}`;
 
-
         const dlRes = await apiFetch(dlUrl);
 
         if (dlRes.status === 401) {
@@ -690,39 +688,33 @@ export default function MeetingDetailPage() {
             id: <code>{meetingId}</code>
           </div>
 
-          {/* Audio player */}
+          {/* Media player */}
           {audioStatus === "ready" && audioUrl && (
-            <div
-              style={{
-                marginTop: "0.75rem",
-                padding: "0.5rem",
-                borderRadius: "0.75rem",
-                background: colors.cardBg,
-                border: `1px solid ${colors.cardBorder}`,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  color: colors.muted,
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Recording{audioFilename ? ` · ${audioFilename}` : ""}
+            <div className="media-player-card" style={{ marginTop: "0.75rem" }}>
+              <div className="media-player-header">
+                <span className="media-player-pill">
+                  {isVideo ? "Video" : "Audio"}
+                </span>
+                <span className="media-player-subtitle">
+                  {audioFilename
+                    ? `Recording · ${audioFilename}`
+                    : "Original recording"}
+                </span>
               </div>
 
               {isVideo ? (
                 <video
+                  className="media-player-el"
                   controls
                   src={audioUrl}
-                  style={{ width: "100%", borderRadius: "0.5rem", maxHeight: "420px" }}
+                  style={{ maxHeight: "420px" }}
                 />
               ) : (
                 <audio
                   ref={audioRef}
+                  className="media-player-el"
                   controls
                   src={audioUrl}
-                  style={{ width: "100%" }}
                 />
               )}
             </div>
@@ -1434,5 +1426,6 @@ export default function MeetingDetailPage() {
     </div>
   );
 }
+
 
 

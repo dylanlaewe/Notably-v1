@@ -23,3 +23,85 @@
 .app-page[data-theme="light"] {
   color: #0f172a;
 }
+
+/* --- Media player shell --- */
+
+.media-player-card {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* Dark mode */
+[data-theme="dark"] .media-player-card {
+  border-color: #111827;
+  background: #020617;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.75);
+}
+
+/* Header row: label + optional meta */
+.media-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.media-player-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+[data-theme="dark"] .media-player-title {
+  color: #e5e7eb;
+}
+
+.media-player-subtitle {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+[data-theme="dark"] .media-player-subtitle {
+  color: #9ca3af;
+}
+
+/* Little green pill on the left */
+.media-player-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #dcfce7;
+  color: #166534;
+}
+
+[data-theme="dark"] .media-player-pill {
+  background: #064e3b;
+  color: #bbf7d0;
+}
+
+/* The actual audio/video element */
+.media-player-el {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0.5rem;
+  background: #e5e7eb;
+}
+
+[data-theme="dark"] .media-player-el {
+  background: #020617;
+}
+
+/* Optional: make the default video element a bit taller + remove ugly outline */
+.media-player-el:focus {
+  outline: none;
+}
+
