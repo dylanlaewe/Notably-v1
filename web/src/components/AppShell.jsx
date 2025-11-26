@@ -96,7 +96,18 @@ export default function AppShell({ children }) {
   };
 
   return (
-    <div className="app-shell" data-theme={theme}>
+      <div className="app-shell" data-theme={theme}>
+        {/* Click-outside overlay for account menu */}
+        {accountOpen && (
+          <div
+            onClick={() => setAccountOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 30, // below account menu (z-index: 40) but above main content
+            }}
+          />
+        )}
       <header className="app-shell-header">
         <button
           type="button"

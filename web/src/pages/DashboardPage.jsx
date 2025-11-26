@@ -15,7 +15,7 @@ export default function DashboardPage() {
 
   const colors = {
     // containers
-    cardBg: isLight ? "#f3f4f6" : "#020617",   // light grey in light mode
+    cardBg: isLight ? "#f3f4f6" : "#020617", // light grey in light mode
     cardBorder: isLight ? "#e5e7eb" : "#111827",
 
     // hero "signed in" card
@@ -97,25 +97,30 @@ export default function DashboardPage() {
   const [lastUploadDetail, setLastUploadDetail] = useState(null);
   const [lastUploadPollError, setLastUploadPollError] = useState("");
 
-  // Meeting deletion
-  const [deleteError, setDeleteError] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-
-  // Meeting renaming
+  // Meeting deletion / renaming
   const [menuOpenId, setMenuOpenId] = useState(null);
   const [renamingId, setRenamingId] = useState(null);
   const [renameError, setRenameError] = useState("");
   const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
 
   // Recording
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState("");
 
+  // Modals
+  const [renameModal, setRenameModal] = useState(null); // { id, currentName } or null
+  const [renameModalValue, setRenameModalValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+
+  const [deleteModal, setDeleteModal] = useState(null); // { id, name } or null
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
   const mediaRecorderRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
-
+  const menuRef = useRef(null);
 
   // ------------------------
   // Initial load: auth ping + meetings
@@ -251,7 +256,6 @@ export default function DashboardPage() {
 
           setMeetings(enrichedItems);
           setMeetingsStatus("ok");
-          // Default the uploadMeetingId to first meeting (use enrichedItems) — optional
         }
       } catch (err) {
         console.error("meetings load failed:", err);
@@ -353,6 +357,26 @@ export default function DashboardPage() {
       }
     };
   }, [lastUploadId, navigate]);
+
+  // ------------------------
+  // Click outside 3-dot menu to close
+  // ------------------------
+  useEffect(() => {
+    if (menuOpenId === null) return;
+
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpenId(null);
+        setRenamingId(null);
+        setRenameError("");
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [menuOpenId]);
 
   // ------------------------
   // Handlers
@@ -547,7 +571,9 @@ export default function DashboardPage() {
     setRecordingError("");
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setRecordingError("Recording is not supported in this browser. Try Chrome or Edge.");
+      setRecordingError(
+        "Recording is not supported in this browser. Try Chrome or Edge."
+      );
       return;
     }
 
@@ -577,7 +603,9 @@ export default function DashboardPage() {
           return;
         }
 
-        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(recordingChunksRef.current, {
+          type: "audio/webm",
+        });
 
         const fileName = `notably-recording-${new Date()
           .toISOString()
@@ -587,8 +615,6 @@ export default function DashboardPage() {
 
         // Reuse existing upload flow
         setUploadFile(file);
-        // If you track status, you can also reset it here if needed
-        // setUploadStatus("idle");
       };
 
       mediaRecorderRef.current = mediaRecorder;
@@ -602,75 +628,44 @@ export default function DashboardPage() {
       }, 1000);
     } catch (err) {
       console.error("Error starting recording:", err);
-      setRecordingError("Unable to access microphone. Check permissions and try again.");
+      setRecordingError(
+        "Unable to access microphone. Check permissions and try again."
+      );
     }
   };
 
   const handleStopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
       mediaRecorderRef.current.stop();
     }
   };
 
-  async function handleDeleteMeeting(id, label) {
-    if (!id) return;
+  // ---------------
+  // Modal actions
+  // ---------------
 
-    const ok = window.confirm(
-      `Delete this meeting?\n\n${label || id}\n\nThis cannot be undone.`
-    );
-    if (!ok) return;
+  const handleConfirmRename = async () => {
+    if (!renameModal) return;
+    const trimmed = renameModalValue.trim();
 
-    try {
-      setDeleteError(null);
-      setDeletingId(id);
-
-      const resp = await apiFetch(`/v1/meetings/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!resp.ok && resp.status !== 204) {
-        const text = await resp.text();
-        throw new Error(`HTTP ${resp.status} ${text}`);
-      }
-
-      // Optimistically remove from list
-      setMeetings((prev) =>
-        (prev || []).filter((m) => {
-          const mid = m.id || m.meeting_id || m.meetingId || m.uuid;
-          return String(mid) !== String(id);
-        })
-      );
-    } catch (err) {
-      console.error("Failed to delete meeting", err);
-      setDeleteError(
-        err?.message || "Failed to delete meeting. Please try again."
-      );
-    } finally {
-      setDeletingId(null);
+    if (!trimmed) {
+      setRenameError("Please enter a name.");
+      return;
     }
-  }
-
-  async function handleRenameMeeting(id, currentLabel) {
-    if (!id) return;
-
-    const initial = currentLabel || "";
-    const next = window.prompt("Rename meeting", initial);
-
-    // User hit cancel
-    if (next === null) return;
-
-    const trimmed = next.trim();
 
     try {
+      setRenameSaving(true);
       setRenameError("");
-      setRenamingId(id);
 
-      const res = await apiFetch(`/v1/meetings/${id}`, {
+      const res = await apiFetch(`/v1/meetings/${renameModal.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: trimmed || null }),
+        body: JSON.stringify({ name: trimmed }),
       });
 
       if (!res.ok) {
@@ -690,23 +685,60 @@ export default function DashboardPage() {
         (prev || []).map((m) => {
           const mid =
             m.id || m.meeting_id || m.meetingId || m.uuid || "";
-          if (String(mid) !== String(id)) return m;
+          if (String(mid) !== String(renameModal.id)) return m;
           return {
             ...m,
-            name: trimmed || null,
+            name: trimmed,
           };
         })
       );
+
+      setRenameModal(null);
     } catch (err) {
       console.error("Failed to rename meeting", err);
       setRenameError(
         err?.message || "Failed to rename meeting. Please try again."
       );
     } finally {
+      setRenameSaving(false);
       setRenamingId(null);
-      setMenuOpenId(null);
     }
-  }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModal) return;
+
+    try {
+      setDeleteSaving(true);
+      setDeleteError("");
+
+      const resp = await apiFetch(`/v1/meetings/${deleteModal.id}`, {
+        method: "DELETE",
+      });
+
+      if (!resp.ok && resp.status !== 204) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status} ${text}`);
+      }
+
+      // Optimistically remove from list
+      setMeetings((prev) =>
+        (prev || []).filter((m) => {
+          const mid = m.id || m.meeting_id || m.meetingId || m.uuid;
+          return String(mid) !== String(deleteModal.id);
+        })
+      );
+
+      setDeleteModal(null);
+    } catch (err) {
+      console.error("Failed to delete meeting", err);
+      setDeleteError(
+        err?.message || "Failed to delete meeting. Please try again."
+      );
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
 
   async function handleCreateMeeting() {
     if (createStatus === "creating") return;
@@ -815,7 +847,11 @@ export default function DashboardPage() {
               </div>
 
               <div
-                style={{ fontSize: "1.1rem", fontWeight: 500, color: colors.text }}
+                style={{
+                  fontSize: "1.1rem",
+                  fontWeight: 500,
+                  color: colors.text,
+                }}
               >
                 {user.email || "unknown"}
               </div>
@@ -899,110 +935,116 @@ export default function DashboardPage() {
                   fontSize: "0.9rem",
                 }}
               >
-                {/* Simple file input */}
-              <label
-                onDragEnter={handleDragOver}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  textAlign: "center",
-                  gap: "0.5rem",
-                  padding: "1.5rem 1.25rem",
-                  borderRadius: "0.9rem",
-                  border: `1px dashed ${
-                    isDragOver ? colors.meetingRowHoverBorder || colors.dropBorder : colors.dropBorder
-                  }`,
-                  background: isDragOver ? colors.dropActiveBg : colors.dropBg,
-                  boxShadow: isDragOver
-                    ? "0 0 0 2px rgba(34,197,94,0.35), 0 10px 25px rgba(15,23,42,0.18)"
-                    : "0 8px 20px rgba(15,23,42,0.06)",
-                  cursor: "pointer",
-                  transition:
-                    "background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease",
-                  transform: isDragOver ? "translateY(-1px)" : "translateY(0)",
-                }}
-              >
-                {/* Hide the native file input but keep it clickable via the label */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="audio/*,video/*"
-                  onChange={handleFileChange}
-                  style={{ display: "none" }}
-                />
-
-                {/* Upload icon */}
-                <div
+                {/* Drag-and-drop dropzone */}
+                <label
+                  onDragEnter={handleDragOver}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                   style={{
-                    width: "2.5rem",
-                    height: "2.5rem",
-                    borderRadius: "999px",
                     display: "flex",
+                    flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor: isLight ? "#dcfce7" : "#052e16",
-                    color: colors.dropIcon,
-                    marginBottom: "0.25rem",
+                    textAlign: "center",
+                    gap: "0.5rem",
+                    padding: "1.5rem 1.25rem",
+                    borderRadius: "0.9rem",
+                    border: `1px dashed ${
+                      isDragOver
+                        ? colors.meetingRowHoverBorder || colors.dropBorder
+                        : colors.dropBorder
+                    }`,
+                    background: isDragOver
+                      ? colors.dropActiveBg
+                      : colors.dropBg,
+                    boxShadow: isDragOver
+                      ? "0 0 0 2px rgba(34,197,94,0.35), 0 10px 25px rgba(15,23,42,0.18)"
+                      : "0 8px 20px rgba(15,23,42,0.06)",
+                    cursor: "pointer",
+                    transition:
+                      "background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease",
+                    transform: isDragOver ? "translateY(-1px)" : "translateY(0)",
                   }}
                 >
-                  {/* Simple inline upload icon */}
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden="true"
+                  {/* Hide the native file input but keep it clickable via the label */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*,video/*"
+                    onChange={handleFileChange}
+                    style={{ display: "none" }}
+                  />
+
+                  {/* Upload icon */}
+                  <div
+                    style={{
+                      width: "2.5rem",
+                      height: "2.5rem",
+                      borderRadius: "999px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: isLight ? "#dcfce7" : "#052e16",
+                      color: colors.dropIcon,
+                      marginBottom: "0.25rem",
+                    }}
                   >
-                    <path
-                      d="M12 3L7 8H10V14H14V8H17L12 3Z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M5 15C4.44772 15 4 15.4477 4 16V19C4 19.5523 4.44772 20 5 20H19C19.5523 20 20 19.5523 20 19V16C20 15.4477 19.5523 15 19 15H17V17H7V15H5Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </div>
+                    {/* Simple inline upload icon */}
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M12 3L7 8H10V14H14V8H17L12 3Z"
+                        fill="currentColor"
+                      />
+                      <path
+                        d="M5 15C4.44772 15 4 15.4477 4 16V19C4 19.5523 4.44772 20 5 20H19C19.5523 20 20 19.5523 20 19V16C20 15.4477 19.5523 15 19 15H17V17H7V15H5Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </div>
 
-                {/* Title */}
-                <div
-                  style={{
-                    fontSize: "0.95rem",
-                    fontWeight: 600,
-                    color: colors.dropText,
-                  }}
-                >
-                  Drag &amp; drop a recording
-                </div>
+                  {/* Title */}
+                  <div
+                    style={{
+                      fontSize: "0.95rem",
+                      fontWeight: 600,
+                      color: colors.dropText,
+                    }}
+                  >
+                    Drag &amp; drop a recording
+                  </div>
 
-                {/* Subtitle / helper text */}
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: colors.muted,
-                    maxWidth: "22rem",
-                  }}
-                >
-                  {uploadFile ? (
-                    <>
-                      Selected: <code>{uploadFile.name}</code>
-                    </>
-                  ) : (
-                    <>
-                      or click anywhere in this box to choose a file.
-                      <br />
-                      Max 60 minutes, up to 1&nbsp;GB. Audio or video (MP3, MP4, MOV, WAV, etc.).
-                    </>
-                  )}
-                </div>
-              </label>
-                
+                  {/* Subtitle / helper text */}
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      color: colors.muted,
+                      maxWidth: "22rem",
+                    }}
+                  >
+                    {uploadFile ? (
+                      <>
+                        Selected: <code>{uploadFile.name}</code>
+                      </>
+                    ) : (
+                      <>
+                        or click anywhere in this box to choose a file.
+                        <br />
+                        Max 60 minutes, up to 1&nbsp;GB. Audio or video (MP3,
+                        MP4, MOV, WAV, etc.).
+                      </>
+                    )}
+                  </div>
+                </label>
+
+                {/* Recording block */}
                 <div
                   style={{
                     marginTop: "0.75rem",
@@ -1016,7 +1058,13 @@ export default function DashboardPage() {
                     gap: "0.75rem",
                   }}
                 >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.15rem",
+                    }}
+                  >
                     <span
                       style={{
                         fontSize: "0.85rem",
@@ -1034,7 +1082,9 @@ export default function DashboardPage() {
                     >
                       {isRecording
                         ? `Recording… ${formatDuration(recordingSeconds)}`
-                        : uploadFile && uploadFile.name.endsWith(".webm")
+                        : uploadFile &&
+                          uploadFile.name &&
+                          uploadFile.name.endsWith(".webm")
                         ? `Last recording: ${uploadFile.name}`
                         : "Use your microphone to capture a quick meeting or call."}
                     </span>
@@ -1052,7 +1102,9 @@ export default function DashboardPage() {
 
                   <button
                     type="button"
-                    onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    onClick={
+                      isRecording ? handleStopRecording : handleStartRecording
+                    }
                     style={{
                       border: "none",
                       outline: "none",
@@ -1086,9 +1138,6 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-
-
-
                 {uploadStatus === "error" && uploadError && (
                   <div
                     style={{
@@ -1114,8 +1163,8 @@ export default function DashboardPage() {
                     }}
                   >
                     Upload queued! id:{" "}
-                    <code>{uploadInfo.upload_id || uploadInfo.id}</code>, status:{" "}
-                    <code>{uploadInfo.status}</code>
+                    <code>{uploadInfo.upload_id || uploadInfo.id}</code>,
+                    status: <code>{uploadInfo.status}</code>
                   </div>
                 )}
 
@@ -1181,8 +1230,7 @@ export default function DashboardPage() {
                     color: colors.text,
                   }}
                 >
-                  Status:{" "}
-                  <code>{lastUploadStatus || "(checking…)"}</code>
+                  Status: <code>{lastUploadStatus || "(checking…)"}</code>
                 </p>
 
                 {lastUploadPollError && (
@@ -1208,8 +1256,8 @@ export default function DashboardPage() {
                       marginTop: "0.25rem",
                     }}
                   >
-                    Background processing finished. Stub transcript & summary
-                    should now exist for this meeting.
+                    Background processing finished. Transcript & summary should
+                    now exist for this meeting.
                   </p>
                 )}
 
@@ -1441,10 +1489,12 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               onClick={(e) => {
-                                e.stopPropagation(); // don't trigger card click
-                                setMenuOpenId((prev) =>
-                                  prev === id ? null : id
+                                e.stopPropagation(); // don’t trigger row click / navigation
+                                setMenuOpenId((current) =>
+                                  current === id ? null : id
                                 );
+                                setRenamingId(null);
+                                setRenameError("");
                               }}
                               aria-label="Meeting options"
                               style={{
@@ -1474,6 +1524,7 @@ export default function DashboardPage() {
 
                             {menuOpenId === id && (
                               <div
+                                ref={menuRef}
                                 onClick={(e) => e.stopPropagation()}
                                 style={{
                                   position: "absolute",
@@ -1482,81 +1533,87 @@ export default function DashboardPage() {
                                   background: colors.menuBg,
                                   border: `1px solid ${colors.menuBorder}`,
                                   borderRadius: "0.5rem",
-                                  boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+                                  boxShadow:
+                                    "0 10px 30px rgba(0,0,0,0.4)",
                                   padding: "0.25rem 0",
-                                  zIndex: 20,
+                                  zIndex: 50,
                                   display: "inline-block",
+                                  minWidth: "160px",
                                 }}
                               >
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    handleRenameMeeting(id, displayTitle)
-                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpenId(null);
+                                    setRenameError("");
+                                    setDeleteError("");
+                                    setRenameModal({
+                                      id,
+                                      currentName:
+                                        m.name ||
+                                        m.title ||
+                                        "Untitled meeting",
+                                    });
+                                    setRenameModalValue(
+                                      m.name || m.title || ""
+                                    );
+                                  }}
                                   style={{
-                                    display: "block",
                                     width: "100%",
+                                    padding: "0.45rem 0.9rem",
                                     textAlign: "left",
-                                    padding: "0.35rem 0.85rem",
-                                    border: "none",
-                                    background: "transparent",
-                                    color: colors.text,
                                     fontSize: "0.85rem",
+                                    background: "transparent",
+                                    border: "none",
+                                    color: colors.text,
                                     cursor: "pointer",
-                                    whiteSpace: "nowrap",
-                                    transition:
-                                      "background 0.08s ease, transform 0.06s ease",
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.background =
-                                      colors.menuItemHoverBg;
-                                    e.currentTarget.style.transform =
-                                      "translateY(-0.5px)";
+                                    e.currentTarget.style.background = colors.menuItemHoverBg;
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.background =
-                                      "transparent";
-                                    e.currentTarget.style.transform =
-                                      "translateY(0)";
+                                    e.currentTarget.style.background = "transparent";
                                   }}
                                 >
-                                  {renamingId === id ? "Renaming…" : "Rename"}
+                                  Rename meeting
                                 </button>
 
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    handleDeleteMeeting(id, displayTitle)
-                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenuOpenId(null);
+                                    setRenameError("");
+                                    setDeleteError("");
+                                    setDeleteModal({
+                                      id,
+                                      name:
+                                        m.name ||
+                                        m.title ||
+                                        "this meeting",
+                                    });
+                                  }}
                                   style={{
-                                    display: "block",
                                     width: "100%",
+                                    padding: "0.45rem 0.9rem",
                                     textAlign: "left",
-                                    padding: "0.35rem 0.85rem",
-                                    border: "none",
-                                    background: "transparent",
-                                    color: colors.menuDeleteText,
                                     fontSize: "0.85rem",
+                                    background: "transparent",
+                                    border: "none",
+                                    color: colors.menuDeleteText,
                                     cursor: "pointer",
-                                    whiteSpace: "nowrap",
-                                    transition:
-                                      "background 0.08s ease, transform 0.06s ease",
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.background =
-                                      colors.menuItemHoverBg;
-                                    e.currentTarget.style.transform =
-                                      "translateY(-0.5px)";
+                                    e.currentTarget.style.background = colors.menuItemHoverBg;
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.background =
-                                      "transparent";
-                                    e.currentTarget.style.transform =
-                                      "translateY(0)";
+                                    e.currentTarget.style.background = "transparent";
                                   }}
                                 >
-                                  {deletingId === id ? "Deleting…" : "Delete"}
+                                  Delete meeting
                                 </button>
+
                               </div>
                             )}
                           </div>
@@ -1598,9 +1655,258 @@ export default function DashboardPage() {
                 </ul>
               )}
             </section>
+
+            {/* Rename modal */}
+            {renameModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(15,23,42,0.55)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 100,
+                }}
+                onClick={() => {
+                  if (!renameSaving) {
+                    setRenameModal(null);
+                    setRenameError("");
+                  }
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "100%",
+                    maxWidth: "420px",
+                    background: colors.cardBg,
+                    borderRadius: "0.9rem",
+                    border: `1px solid ${colors.cardBorder}`,
+                    boxShadow: "0 24px 60px rgba(15,23,42,0.45)",
+                    padding: "1.25rem 1.5rem",
+                  }}
+                >
+                  <h2
+                    style={{
+                      fontSize: "1rem",
+                      fontWeight: 600,
+                      marginBottom: "0.75rem",
+                      color: colors.text,
+                    }}
+                  >
+                    Rename meeting
+                  </h2>
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: colors.muted,
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    Update the title for{" "}
+                    <strong>
+                      {renameModal.currentName || "this meeting"}
+                    </strong>
+                    .
+                  </p>
+
+                  <input
+                    autoFocus
+                    value={renameModalValue}
+                    onChange={(e) => {
+                      setRenameModalValue(e.target.value);
+                      setRenameError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleConfirmRename();
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "0.45rem 0.6rem",
+                      borderRadius: "0.5rem",
+                      border: `1px solid ${
+                        renameError ? "#fca5a5" : colors.cardBorder
+                      }`,
+                      fontSize: "0.9rem",
+                      marginBottom: "0.5rem",
+                      background: isLight ? "#ffffff" : "#020617",
+                      color: colors.text,
+                    }}
+                  />
+
+                  {renameError && (
+                    <div
+                      style={{
+                        fontSize: "0.78rem",
+                        color: "#f97373",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      {renameError}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      gap: "0.5rem",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!renameSaving) {
+                          setRenameModal(null);
+                          setRenameError("");
+                        }
+                      }}
+                      style={{
+                        padding: "0.4rem 0.85rem",
+                        fontSize: "0.85rem",
+                        borderRadius: "999px",
+                        border: `1px solid ${colors.cardBorder}`,
+                        background: "transparent",
+                        color: colors.text,
+                        cursor: renameSaving ? "default" : "pointer",
+                      }}
+                      disabled={renameSaving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmRename}
+                      style={{
+                        padding: "0.4rem 0.95rem",
+                        fontSize: "0.85rem",
+                        borderRadius: "999px",
+                        border: "none",
+                        backgroundColor: "#16a34a",
+                        color: "#ecfdf5",
+                        cursor: renameSaving ? "default" : "pointer",
+                        opacity: renameSaving ? 0.8 : 1,
+                      }}
+                      disabled={renameSaving}
+                    >
+                      {renameSaving ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delete modal */}
+            {deleteModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(15,23,42,0.55)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 100,
+                }}
+                onClick={() => {
+                  if (!deleteSaving) {
+                    setDeleteModal(null);
+                  }
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "100%",
+                    maxWidth: "420px",
+                    background: colors.cardBg,
+                    borderRadius: "0.9rem",
+                    border: `1px solid ${colors.cardBorder}`,
+                    boxShadow: "0 24px 60px rgba(15,23,42,0.45)",
+                    padding: "1.25rem 1.5rem",
+                  }}
+                >
+                  <h2
+                    style={{
+                      fontSize: "1rem",
+                      fontWeight: 600,
+                      marginBottom: "0.75rem",
+                      color: colors.text,
+                    }}
+                  >
+                    Delete meeting
+                  </h2>
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: colors.muted,
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    Are you sure you want to delete{" "}
+                    <strong>{deleteModal.name || "this meeting"}</strong>? This
+                    will permanently remove its transcript, summary, and action
+                    items.
+                  </p>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      gap: "0.5rem",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!deleteSaving) {
+                          setDeleteModal(null);
+                        }
+                      }}
+                      style={{
+                        padding: "0.4rem 0.85rem",
+                        fontSize: "0.85rem",
+                        borderRadius: "999px",
+                        border: `1px solid ${colors.cardBorder}`,
+                        background: "transparent",
+                        color: colors.text,
+                        cursor: deleteSaving ? "default" : "pointer",
+                      }}
+                      disabled={deleteSaving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmDelete}
+                      style={{
+                        padding: "0.4rem 0.95rem",
+                        fontSize: "0.85rem",
+                        borderRadius: "999px",
+                        border: "none",
+                        backgroundColor: "#dc2626",
+                        color: "#fef2f2",
+                        cursor: deleteSaving ? "default" : "pointer",
+                        opacity: deleteSaving ? 0.85 : 1,
+                      }}
+                      disabled={deleteSaving}
+                    >
+                      {deleteSaving ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </main>
     </div>
   );
 }
+
