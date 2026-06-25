@@ -45,7 +45,7 @@ const FAQPage = () => {
           id: 2,
           question: "What file formats does Notably support?",
           answer:
-            "Notably supports most common audio and video formats including MP3, MP4, WAV, M4A, MOV, and AVI. Files must be under 1GB in size and no longer than 60 minutes in duration.",
+            "Notably supports most common audio and video formats including MP3, MP4, WAV, M4A, MOV, and AVI. This local build does not enforce an app-level file size or duration cap, though very large uploads still depend on your machine, browser, storage, and network.",
         },
         {
           id: 3,
@@ -74,7 +74,7 @@ const FAQPage = () => {
           id: 6,
           question: "Are there any usage limits?",
           answer:
-            "Currently, you can upload files up to 1GB in size and 60 minutes in duration. We may introduce fair usage policies in the future, but for now, you can use Notably freely within these technical limits.",
+            "This local project does not enforce an app-level upload size or duration limit. Practical limits still come from the environment around it, such as available memory, browser behavior, reverse proxies, and storage capacity.",
         },
       ],
     },
@@ -137,7 +137,7 @@ const FAQPage = () => {
           id: 14,
           question: "What if my transcription fails?",
           answer:
-            "If a transcription fails, check that your file meets our format and size requirements. Common issues include corrupted files, unsupported formats, or poor audio quality. Our support team can help troubleshoot specific issues.",
+            "If a transcription fails, check for corrupted media, unsupported codecs, storage issues, worker problems, or poor audio quality. In this local build, failures are more likely to come from environment constraints than from a hard upload cap in the app itself.",
         },
         {
           id: 15,

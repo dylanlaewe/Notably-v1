@@ -1,400 +1,205 @@
-# Notably – AI Meeting Assistant (MVP)
+# Notably
 
-Notably is a meeting assistant web app that lets you:
+Notably is a local-first audio and video transcription app that turns recordings into transcripts, summaries, and action items. The frontend uses Supabase Auth for login, the backend queues upload processing jobs, and the worker pipeline handles transcription and summarization.
 
-* Create a **meeting**
-* **Upload** a recording for that meeting
-* Process the recording in a **background worker**
-* Generate a **transcript** (Whisper)
-* Generate a **summary and action bullets** (GPT‑4o mini)
-* View everything on a **Meeting Detail** page
-* **Export** the meeting to **PDF** and **Markdown**
+This repo is set up primarily for local development. It uses React/Vite for the web app, FastAPI for the API, Postgres for relational data, Redis + RQ for background jobs, and optional MinIO for object storage.
 
-This README explains:
+## What Notably Does
 
-1. What the app does and what we accomplished
-2. How the system is structured (backend, frontend, workers)
-3. How to run it locally (step‑by‑step)
-4. How to demo the key flow in class
-5. What is left (deployment + polish)
+- Sign up and sign in with Supabase email/password auth
+- Upload audio or video recordings from the dashboard
+- Create meetings and attach uploads automatically
+- Queue background jobs for processing
+- Generate transcripts from uploaded media
+- Generate summaries and action items from those transcripts
+- View results on the dashboard and meeting detail pages
+- Export meeting content in supported formats
 
----
+## Project Structure
 
-## 1. Features & What We Accomplished
+- `backend/`: FastAPI app, auth, database access, models, worker tasks, and API routes
+- `web/`: React/Vite frontend
+- `tests/`: backend tests
+- `docker-compose.yml`: local Postgres, Redis, and MinIO services
+- `alembic.ini` and `backend/migrations/`: database migrations
 
-### Core user flow
+## High-Level Flow
 
-A logged‑in user can now:
+1. The user signs in through Supabase on the frontend.
+2. Supabase returns an access token to the browser.
+3. The frontend sends that token to the FastAPI backend as a bearer token.
+4. The backend verifies the token using the configured Supabase JWT settings.
+5. The upload is saved, queued, and processed by an RQ worker.
+6. The frontend polls for status updates and then shows the transcript, summary, and actions.
 
-1. **Log in** via Supabase Auth from the frontend
-2. **Create a meeting** from the Dashboard ("New meeting" button)
-3. **Upload** an audio/video file tied to that meeting
-4. Watch the upload move from **queued → processing → done** (live status polling)
-5. **Open the Meeting Detail page** and see:
+## Requirements
 
-   * A **transcript** (timestamped segments)
-   * A **summary** with bullet points
-   * **Action items** (both AI‑generated and manually added)
-6. **Export** the meeting to:
+- Python 3.10+
+- Node.js 18+ and npm
+- Docker Desktop, or local Postgres/Redis/MinIO equivalents
+- `ffmpeg` and `ffprobe` installed and available on `PATH`
+- A Supabase project for authentication
+- An OpenAI API key if you want real transcription/summarization
 
-   * **PDF** (`/v1/meetings/{id}/export/pdf`)
-   * **Markdown** (`/v1/meetings/{id}/export/md`)
+## Environment Files
 
-This entire loop now works end‑to‑end with **real AI** (Whisper + GPT‑4o mini), not just stub data.
+Real credentials stay in ignored local files and should not be committed.
 
-### Backend capabilities
+### Backend `.env`
 
-* FastAPI backend with:
+The backend reads environment variables from the repo root `.env`.
 
-  * JWT‑based auth (Supabase) + optional dev API key
-  * Meeting model + team‑based access control
-  * Uploads model with deduplication and size/duration limits
-  * Transcript/segment models for Whisper output
-  * Summary + SummaryBullet + BulletCitation models for GPT output
-  * ActionItem model for manual or future AI‑generated actions
-* Background processing using **Redis + RQ**:
+Example:
 
-  * `process_stub(upload_id, meeting_id)` worker function:
+```env
+DATABASE_URL=postgresql+psycopg://notably:notably@localhost:5432/notably_dev
+REDIS_URL=redis://127.0.0.1:6379/0
+RQ_ENABLE=true
+MINIO_ENABLE=true
+DEV_MODE=true
+DEV_API_KEY=dev-api
+NOTABLY_DEV_USER_ID=11111111-1111-1111-1111-111111111111
 
-    * Marks upload `queued → processing → done`
-    * Downloads original media from MinIO (if enabled)
-    * Uses `ffprobe` to detect duration
-    * Uses `ffmpeg` to transcode to 16 kHz mono WAV
-    * Calls Whisper (if `WHISPER_ENABLE=true`) to write transcript rows
-    * Calls GPT‑4o mini (if `OPENAI_API_KEY` present) to write Summary + bullets + citations
-    * Falls back to safe stub output if AI is disabled or fails
+JWT_ISSUER=https://YOUR_PROJECT_ID.supabase.co/auth/v1
+JWT_AUDIENCE=authenticated
+JWKS_URL=https://YOUR_PROJECT_ID.supabase.co/auth/v1/.well-known/jwks.json
+JWT_LEEWAY_SECONDS=60
+SUPABASE_JWT_SECRET=YOUR_SUPABASE_LEGACY_JWT_SECRET
+JWT_SECRET=${SUPABASE_JWT_SECRET}
 
-### Frontend capabilities
+WHISPER_ENABLE=true
+ENABLE_DIARIZATION=true
+TRANSCRIBE_MODEL=gpt-4o-transcribe-diarize
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+```
 
-* **Dashboard page** (`/dashboard`):
+### Frontend `web/.env.local`
 
-  * Shows logged‑in user info (from `/v1/auth/ping`)
-  * **Uploads** card:
+Example:
 
-    * Meeting dropdown + manual meeting ID textbox
-    * File input for audio/video
-    * "Upload recording" button wired to `POST /v1/uploads`
-    * Live status polling of the last upload
-  * **My meetings** list:
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
+```
 
-    * Driven by `/v1/my/meetings`
-    * Each meeting has a **View meeting →** button
-    * Each meeting has a **Delete** button (trash icon, with confirm)
-    * "New meeting" button wired to `POST /v1/meetings`
+Notes:
 
-* **Meeting Detail page** (`/meetings/:meetingId`):
+- Use the Supabase publishable key in the frontend.
+- Do not put the Supabase secret key in the browser env file.
+- This backend currently verifies Supabase JWTs with the shared legacy JWT secret.
+- Tracked examples are included as `.env.example` and `web/.env.local.example`.
 
-  * Fetches from:
+## Local Setup
 
-    * `/v1/meetings/{id}/transcript`
-    * `/v1/meetings/{id}/summary`
-    * `/v1/meetings/{id}/actions`
-  * Shows:
-
-    * Summary bullets (with segment citations shown inline)
-    * Scrollable transcript with segment IDs + timestamps
-    * Action items list + form to add manual actions
-    * Export buttons for PDF + Markdown
-
----
-
-## 2. Architecture Overview
-
-High‑level components:
-
-* **Frontend**
-
-  * React + Vite app in `web/`
-  * Talks to the FastAPI backend via `apiFetch`, adding `Authorization: Bearer <Supabase JWT>`
-
-* **Backend API**
-
-  * FastAPI app in `backend/app/`
-  * Exposes REST endpoints under `/v1/...`
-  * Uses SQLAlchemy ORM and Postgres via `DATABASE_URL`
-  * Enforces per‑user access with `require_user` + team membership checks
-
-* **Database**
-
-  * PostgreSQL
-  * Tables: `meeting`, `upload`, `upload_object`, `transcript`, `transcript_segment`, `summary`, `summary_bullet`, `bullet_citation`, `action_item`, `team`, `team_member`, etc.
-
-* **Storage**
-
-  * Optional **MinIO** (S3‑compatible) for binary blobs:
-
-    * Original uploaded files
-    * Derived `audio-16k.wav`
-
-* **Background Workers**
-
-  * Redis queue named `notably`
-  * RQ worker process running `rq worker notably`
-  * Worker executes `backend.app.tasks.process_stub`
-
-* **AI Services**
-
-  * Whisper (via `maybe_transcribe_from_minio`) for transcription
-  * GPT‑4o mini (via `maybe_generate_summary`) for summary + actions
-
-Data flow for one recording:
-
-1. User hits `POST /v1/uploads` with form data (`file`, `meeting_id`).
-2. Backend writes an `upload` row and (optionally) stores the file in MinIO.
-3. Backend enqueues `process_stub(upload_id, meeting_id)` on the `notably` queue.
-4. Worker pops that job and:
-
-   * Downloads and transcoded audio
-   * Calls Whisper → writes `transcript` + `transcript_segment` rows
-   * Calls GPT → writes `summary`, `summary_bullet`, `bullet_citation`
-   * Marks `upload.status = "done"`
-5. Frontend polls `/v1/uploads/{upload_id}` until `status = done`.
-6. User opens Meeting Detail page; frontend calls `/transcript` + `/summary` + `/actions` and renders the result.
-
----
-
-## 3. Prerequisites
-
-To run the app locally, you’ll need:
-
-* **Python** 3.10+
-* **Node.js** + npm (or yarn) for the React frontend
-* **PostgreSQL** (local or Docker)
-* **Redis** (local or Docker)
-* **ffmpeg** and **ffprobe** installed and on your PATH
-* **OpenAI API key** (for GPT and optionally Whisper)
-* **Supabase project** (for auth) with:
-
-  * Project URL
-  * anon/public key
-
-Optional but recommended:
-
-* **MinIO** (or S3) for storing large uploads in development
-
----
-
-## 4. Backend – Local Setup & Run
-
-> These instructions assume you are in the repository root.
-
-### 4.1. Create and activate a virtualenv
+### 1. Install backend dependencies
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # macOS / Linux
-# .venv\Scripts\activate  # Windows (PowerShell)
-```
-
-### 4.2. Install backend dependencies
-
-(Adapt to your project’s actual dependency manager – pip, pip-tools, Poetry, etc.)
-
-```bash
+source .venv/bin/activate
 pip install -r requirements.txt
-# or: poetry install
 ```
 
-### 4.3. Start Postgres
-
-Either local Postgres or Docker. Example with Docker:
-
-```bash
-docker run --name notably-postgres \
-  -e POSTGRES_USER=notably \
-  -e POSTGRES_PASSWORD=notably \
-  -e POSTGRES_DB=notably_dev \
-  -p 5432:5432 \
-  -d postgres:16-alpine
-```
-
-Then set `DATABASE_URL` to match:
-
-```bash
-export DATABASE_URL='postgresql+psycopg2://notably:notably@localhost:5432/notably_dev'
-```
-
-### 4.4. Run migrations
-
-Use Alembic (or your migration tool) to create the schema:\n
-
-```bash
-alembic upgrade head
-# or: poetry run alembic upgrade head
-```
-
-### 4.5. Configure backend environment
-
-Create a `.env` or export environment variables in your shell. Example:
-
-```bash
-# Database
-export DATABASE_URL='postgresql+psycopg2://notably:notably@localhost:5432/notably_dev'
-
-# Redis / RQ
-export RQ_ENABLE=1
-
-# AI
-export OPENAI_API_KEY='sk-...'          # your real key
-export SUMMARY_MODEL='gpt-4o-mini'
-export WHISPER_ENABLE=true              # or false to disable
-
-# Optional: MinIO
-export MINIO_ENABLE=false                # true if you have MinIO running
-# export MINIO_ENDPOINT='http://127.0.0.1:9000'
-# export MINIO_ACCESS_KEY='minioadmin'
-# export MINIO_SECRET_KEY='minioadmin'
-
-# Logging (shared by tasks + summarizer)
-export NOTABLY_LOG_FILE='/tmp/notably_worker.log'
-
-# macOS safety for RQ + ffmpeg
-export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
-```
-
-For local Supabase JWT auth, the backend expects `Authorization: Bearer <JWT>` from the frontend; most of the configuration lives on the frontend side (see below).
-
-### 4.6. Run Redis
-
-If you don’t have `redis-server` installed locally, you can run it via Docker:
-
-```bash
-docker run --name notably-redis -p 6379:6379 -d redis:7-alpine
-```
-
-### 4.7. Run the API server
-
-From the repo root (with `.venv` activated):
-
-```bash
-uvicorn backend.app.main:app --reload
-# or however your project normally starts FastAPI
-```
-
-The API will be available at:
-
-* `http://127.0.0.1:8000`
-
-### 4.8. Run the RQ worker
-
-In a second terminal (same `.venv`, same env vars):
-
-```bash
-rq worker notably
-```
-
-You should see the worker subscribe to the `notably` queue and log jobs as they are processed.
-
----
-
-## 5. Frontend – Local Setup & Run
-
-From the repo root:
+### 2. Install frontend dependencies
 
 ```bash
 cd web
 npm install
+cd ..
 ```
 
-Create `web/.env.local` with:
+### 3. Start infrastructure
 
 ```bash
-VITE_API_BASE_URL='http://127.0.0.1:8000'
-VITE_SUPABASE_URL='https://<your-project>.supabase.co'
-VITE_SUPABASE_ANON_KEY='<your-supabase-anon-key>'
+docker compose up -d postgres redis minio
 ```
 
-Then run the dev server:
+This exposes:
+
+- Postgres at `localhost:5432`
+- Redis at `localhost:6379`
+- MinIO API at `localhost:9000`
+- MinIO Console at `localhost:9001`
+
+### 4. Run migrations
 
 ```bash
+alembic upgrade head
+```
+
+### 5. Start the backend API
+
+```bash
+uvicorn backend.app.main:app --reload
+```
+
+### 6. Start the background worker
+
+In a second terminal:
+
+```bash
+source .venv/bin/activate
+rq worker notably
+```
+
+### 7. Start the frontend
+
+In a third terminal:
+
+```bash
+cd web
 npm run dev
 ```
 
-By default, Vite serves the frontend at:
+Open the local Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
 
-* `http://127.0.0.1:5173` (or similar port)
+## Using the App
 
-When the user logs in via Supabase, the frontend receives a JWT and stores it in `localStorage`. Every call via `apiFetch` attaches `Authorization: Bearer <token>` so the backend can use `require_user` to authenticate and enforce access.
+1. Sign up or sign in.
+2. Open the dashboard.
+3. Upload an audio or video file.
+4. Wait for the upload to progress from `queued` to `processing` to `done`.
+5. Open the meeting detail page to review transcript, summary, and actions.
 
----
+## Upload Limits
 
-## 6. How to Demo the App in Class
+Notably no longer enforces an application-level upload size or duration cap in the FastAPI upload route. That means large files are allowed by the app itself.
 
-Here is a simple, reliable demo script:
+Practical limits can still come from:
 
-1. **Start services** (before class):
+- browser behavior for large multipart uploads
+- local memory or disk limits
+- MinIO or storage failures
+- reverse proxy body-size limits if you deploy behind one later
+- background worker or transcription timeouts
 
-   * Postgres
-   * Redis
-   * FastAPI backend (`uvicorn`)
-   * RQ worker (`rq worker notably`)
-   * Frontend (`npm run dev`)
+## Helpful Commands
 
-2. **Log in** through the frontend using a Supabase test account.
+```bash
+docker compose up -d
+docker compose down
+alembic upgrade head
+uvicorn backend.app.main:app --reload
+cd web && npm run dev
+pytest
+```
 
-3. On the **Dashboard**:
+## Verification
 
-   * Show the "Signed in as" card (proves auth is working).
-   * Click **New meeting** – point out that it appears in the “My meetings” list.
+Useful local checks:
 
-4. **Upload a recording**:
+```bash
+cd web && npm run build
+pytest
+```
 
-   * In the "Uploads" card, select the new meeting in the dropdown.
-   * Choose an audio file (a short ~1–3 minute recording works best).
-   * Click **Upload recording**.
-   * Show the "Latest upload status" card changing from `queued → processing → done`.
+## Current Caveats
 
-5. **Open the Meeting Detail page**:
+- The backend JWT verification path is built around a shared-secret Supabase JWT setup.
+- Full upload processing depends on Redis/RQ and, if enabled, MinIO.
+- Real transcription/summarization requires OpenAI configuration.
+- Some older docs/components in the repo may still reflect MVP-era wording outside the primary user flow.
 
-   * Click **View meeting →** on the meeting.
-   * Show:
+## License
 
-     * **Summary** bullets and how they reference transcript segments.
-     * **Transcript** segments with timestamps.
-     * **Action items** (add a manual one to prove the POST works).
-
-6. **Export**:
-
-   * Click **Export PDF** and **Export .md** to show that we can generate and download structured outputs.
-
-7. If time allows, briefly show the **worker logs** to highlight how the job is processed (ffmpeg/Whisper/GPT).
-
----
-
-## 7. How We Built It (Process)
-
-* We followed a **vertical slice** approach:
-
-  1. First, get `POST /v1/uploads` working with simple stubbed transcript/summary written to the database.
-  2. Then wire Redis/RQ so uploads are processed in the background.
-  3. Then add real AI integration: Whisper transcription + GPT‑4o mini summaries.
-  4. Finally, connect all endpoints to the React UI and clean up the UX.
-
-* We used **curl + logs** heavily to debug each API endpoint before wiring the frontend.
-
-* We added small but important features like:
-
-  * Meeting creation and deletion
-  * Team‑based access control for meeting‑scoped endpoints
-  * Clean error handling and 401/403 flows
-
-The result is a realistic MVP that not only demonstrates AI capabilities, but also shows good engineering practices: background work, storage, auth, and a clear web UI.
-
----
-
-## 8. Remaining Work (Deployment & Polish)
-
-We intentionally stopped at a solid local‑dev MVP. Remaining tasks include:
-
-1. **Deployment**
-
-   * Containerize the stack with Docker Compose
-   * Deploy to a small cloud VM or managed service
-   * Set up HTTPS, environment variables, logging, and basic monitoring
-
-2. **Bug fixes & testing**
-
-   * Fix minor edge cases around meeting list refreshes and worker errors
-   * Add unit tests / integration tests for key endpoints
-
-Even with these remaining items, the current state of Notably already demonstrates a complete AI‑powered meeting workflow from upload to transcript and summary, which was our main goal for this project phase.
+No license file is currently included in this repository.

@@ -76,8 +76,6 @@ class _UploadRec(BaseModel):
 
 _UPLOADS: Dict[str, _UploadRec] = {}
 _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
-MAX_UPLOAD_BYTES = 1_000_000_000
-# 1 GB cap
 
 def minio_enabled() -> bool:
     return os.getenv("MINIO_ENABLE", "false").lower() == "true"
@@ -229,10 +227,6 @@ async def create_upload(
         raise HTTPException(status_code=422, detail="empty file")
     sha = _sha256(blob)
     byte_size = len(blob)
-    if byte_size > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="file too large (limit 1 GB)")
-    if duration_sec is not None and duration_sec > 3600:
-        raise HTTPException(status_code=422, detail="duration exceeds 60 minutes")
 
     _log_upload(f"file read ok, bytes={byte_size}, sha={sha[:12]}..., meeting_id={meeting_id}")
 

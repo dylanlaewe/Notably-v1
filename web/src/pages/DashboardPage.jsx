@@ -1037,8 +1037,8 @@ export default function DashboardPage() {
                       <>
                         or click anywhere in this box to choose a file.
                         <br />
-                        Max 60 minutes, up to 1&nbsp;GB. Audio or video (MP3,
-                        MP4, MOV, WAV, etc.).
+                        Large audio or video files are supported. Common
+                        formats include MP3, MP4, MOV, WAV, and more.
                       </>
                     )}
                   </div>
@@ -1909,4 +1909,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

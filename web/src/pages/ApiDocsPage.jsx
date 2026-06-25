@@ -205,16 +205,21 @@ const ApiDocsPage = () => {
           </div>
 
           <div className="limits-section">
-            <h3>File limits (phase 1)</h3>
+            <h3>Upload behavior</h3>
             <ul className="limits-list">
               <li>
-                <strong>Max size:</strong> 1 GB
+                <strong>Size cap:</strong> none enforced by the application
               </li>
               <li>
-                <strong>Max duration:</strong> 60 minutes
+                <strong>Duration cap:</strong> none enforced by the application
               </li>
               <li>
                 <strong>Accepted formats:</strong> .mp3, .wav, .m4a, .mp4, .mov
+              </li>
+              <li>
+                <strong>Note:</strong> practical limits can still come from the
+                browser, available memory, storage, or any proxy in front of the
+                API.
               </li>
             </ul>
           </div>
@@ -587,8 +592,8 @@ const ApiDocsPage = () => {
               <pre>
                 <code>{`{
   "error": {
-    "code": "TooLarge",
-    "message": "Max 1GB exceeded"
+    "code": "UploadFailed",
+    "message": "storage error"
   }
 }`}</code>
               </pre>
@@ -718,4 +723,3 @@ Client → API: GET /v1/uploads/{id}/result`}</code>
 };
 
 export default ApiDocsPage;
-
