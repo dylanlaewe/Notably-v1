@@ -3,6 +3,7 @@ import hashlib
 import uuid
 import typing
 import os
+import platform
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, List, Optional, Literal
@@ -79,6 +80,17 @@ _INDEX: Dict[Tuple[str, str], str] = {}  # (meeting_id, sha256) -> upload_id
 
 def minio_enabled() -> bool:
     return os.getenv("MINIO_ENABLE", "false").lower() == "true"
+
+
+def use_inline_processing() -> bool:
+    """
+    Local macOS runs can crash RQ work-horse children during fork-heavy media work.
+    Default to in-process background execution on Darwin unless explicitly disabled.
+    """
+    override = os.getenv("NOTABLY_INLINE_UPLOAD_PROCESSING")
+    if override is not None:
+        return override.lower() in {"1", "true", "yes", "y"}
+    return platform.system() == "Darwin"
 
 
 def _log_upload(msg: str) -> None:
@@ -327,23 +339,31 @@ async def create_upload(
         _log_upload("MINIO_ENABLE is false; skipping MinIO upload")
 
     # -------------------------
-    # 6) STRICT: RQ must be enabled; no stub path
+    # 6) Queue or local background processing
     # -------------------------
     from backend.app.queue import RQ_ENABLE, get_queue
     from backend.app.tasks import process_stub
 
-    _log_upload(f"RQ_ENABLE in create_upload={RQ_ENABLE!r}")
+    inline_processing = use_inline_processing()
+    _log_upload(f"RQ_ENABLE in create_upload={RQ_ENABLE!r}, inline_processing={inline_processing!r}")
 
-    if not RQ_ENABLE:
-        # Force you into Route A: if env isn't set, fail loudly.
-        raise HTTPException(
-            status_code=500,
-            detail="RQ_ENABLE is false; server must run with RQ_ENABLE=true to process uploads",
+    if inline_processing:
+        if background_tasks is None:
+            raise HTTPException(status_code=500, detail="background_tasks_unavailable")
+        background_tasks.add_task(process_stub, uid, meeting_id)
+        _log_upload(f"scheduled inline background processing uid={uid} meeting_id={meeting_id}")
+    else:
+        if not RQ_ENABLE:
+            raise HTTPException(
+                status_code=500,
+                detail="RQ_ENABLE is false; enable RQ or NOTABLY_INLINE_UPLOAD_PROCESSING=true",
+            )
+
+        q = get_queue()
+        job = q.enqueue(process_stub, uid, meeting_id)
+        _log_upload(
+            f"enqueued process_stub job.id={getattr(job, 'id', None)} uid={uid} meeting_id={meeting_id}"
         )
-
-    q = get_queue()
-    job = q.enqueue(process_stub, uid, meeting_id)
-    _log_upload(f"enqueued process_stub job.id={getattr(job, 'id', None)} uid={uid} meeting_id={meeting_id}")
 
     return UploadCreateResp(upload_id=uid, status="queued")
 
