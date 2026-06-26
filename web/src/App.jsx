@@ -1,5 +1,5 @@
 // web/src/App.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import LoginPage from "./pages/LoginPage.jsx";
@@ -10,14 +10,55 @@ import SettingsPage from "./pages/SettingsPage.jsx";
 import ApiDocsPage from "./pages/ApiDocsPage.jsx";
 import FAQPage from "./pages/FAQPage.jsx";
 
-import { isLoggedIn } from "./lib/authToken";
+import {
+  clearAccessToken,
+  isLoggedIn,
+  setAccessToken,
+  subscribeToAuthChanges,
+} from "./lib/authToken";
 import AppShell from "./components/AppShell.jsx";
+import { supabase } from "./lib/supabaseClient";
 
 import UpdatePasswordPage from "./pages/UpdatePasswordPage";
 
 
 function App() {
-  const authed = isLoggedIn();
+  const [authed, setAuthed] = useState(() => isLoggedIn());
+
+  useEffect(() => {
+    return subscribeToAuthChanges(() => {
+      setAuthed(isLoggedIn());
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active || error) return;
+      const token = data.session?.access_token || null;
+      if (token) {
+        setAccessToken(token);
+      } else {
+        clearAccessToken();
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) {
+        setAccessToken(session.access_token);
+      } else {
+        clearAccessToken();
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const withShell = (element) =>
     authed ? <AppShell>{element}</AppShell> : <Navigate to="/login" replace />;
@@ -64,4 +105,3 @@ function App() {
 }
 
 export default App;
-
